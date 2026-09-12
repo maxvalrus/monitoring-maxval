@@ -32,6 +32,8 @@ def test_github_update_script_preserves_runtime_and_requires_safe_update() -> No
     assert "docker compose exec -T app alembic upgrade head" in script
     assert "docker compose down -v" not in script
     assert "MONITORING_GITHUB_TOKEN" not in script
+    assert "cleanup() {\n    :\n}" in script
+    assert "MONITORING_PROJECT_DIR" in script
 
 
 def test_uninstall_script_requires_separate_confirmation_for_runtime_data() -> None:

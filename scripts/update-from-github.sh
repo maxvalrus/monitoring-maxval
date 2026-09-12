@@ -6,6 +6,7 @@ set -Eeuo pipefail
 readonly DEFAULT_REF="main"
 
 cleanup() {
+    :
 }
 trap cleanup EXIT
 
@@ -43,7 +44,8 @@ wait_for_ready() {
 
 main() {
     local project_dir
-    project_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+    project_dir="${MONITORING_PROJECT_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}"
+    [ -d "$project_dir" ] || fail "Не найден каталог проекта: $project_dir"
     cd "$project_dir"
 
     command -v git >/dev/null 2>&1 || fail 'Не найдена команда git.'
