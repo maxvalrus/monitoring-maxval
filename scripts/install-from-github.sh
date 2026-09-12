@@ -1,23 +1,16 @@
 #!/usr/bin/env bash
 # Install a new Monitoring Maxval instance from the private GitHub repository.
 #
-# The script deliberately keeps the GitHub token in memory only.  It never places
-# it in the origin URL, .git/config, .env, Docker environment or shell history.
-
 set -Eeuo pipefail
 
 readonly DEFAULT_REPOSITORY="https://github.com/maxvalrus/monitoring-maxval.git"
 readonly DEFAULT_REF="main"
 readonly DEFAULT_INSTALL_DIR="/opt/monitoring-maxval"
 
-github_token="${MONITORING_GITHUB_TOKEN:-}"
-git_askpass=""
 staging_dir=""
 
 cleanup() {
-    [ -n "$git_askpass" ] && rm -f "$git_askpass"
     [ -n "$staging_dir" ] && rm -rf "$staging_dir"
-    unset MONITORING_GITHUB_TOKEN github_token
 }
 trap cleanup EXIT
 
@@ -55,25 +48,6 @@ confirm() {
 
 generate_secret() {
     openssl rand -hex "$1"
-}
-
-setup_git_auth() {
-    if [ -z "$github_token" ]; then
-        read -r -s -p "GitHub token (Contents: Read, ввод не отображается): " github_token
-        printf '\n'
-    fi
-    [ -n "$github_token" ] || fail "Для приватного репозитория нужен GitHub token с правом Contents: Read."
-
-    git_askpass="$(mktemp "${TMPDIR:-/tmp}/monitoring-maxval-git-askpass.XXXXXX")"
-    chmod 700 "$git_askpass"
-    printf '%s\n' '#!/bin/sh' \
-        'case "$1" in' \
-        '  *Username*) printf "%s" "x-access-token" ;;' \
-        '  *) printf "%s" "$MONITORING_GITHUB_TOKEN" ;;' \
-        'esac' > "$git_askpass"
-    export MONITORING_GITHUB_TOKEN="$github_token"
-    export GIT_ASKPASS="$git_askpass"
-    export GIT_TERMINAL_PROMPT=0
 }
 
 create_env_file() {
@@ -140,7 +114,6 @@ main() {
 
     owner="$(id -un)"
     group="$(id -gn)"
-    setup_git_auth
     staging_dir="$(mktemp -d "${TMPDIR:-/tmp}/monitoring-maxval-install.XXXXXX")"
     printf '%s\n' 'Скачивание исходного кода…'
     git clone --depth 1 --branch "$DEFAULT_REF" "$DEFAULT_REPOSITORY" "$staging_dir/repository"

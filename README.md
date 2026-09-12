@@ -55,23 +55,10 @@ sudo docker compose exec app python scripts/seed_demo.py
 ## Установка и обновление из GitHub
 
 Для нового сервера с Docker Engine, Docker Compose v2, Git, curl и openssl есть
-интерактивный установщик. Репозиторий приватный, поэтому предварительно создайте
-fine-grained GitHub token с единственным правом **Contents: Read** для
-`maxvalrus/monitoring-maxval`. Токен не сохраняется в проекте.
-
-Выполните в терминале от обычного пользователя с `sudo` (команда запросит token без
-отображения, каталог установки, разрешённые Host и демоданные):
+интерактивный установщик. Выполните от обычного пользователя с `sudo`:
 
 ```bash
-read -rsp 'GitHub token: ' MONITORING_GITHUB_TOKEN; echo
-export MONITORING_GITHUB_TOKEN
-curl --fail --silent --show-error \
-  -H "Authorization: Bearer ${MONITORING_GITHUB_TOKEN}" \
-  https://raw.githubusercontent.com/maxvalrus/monitoring-maxval/main/scripts/install-from-github.sh \
-  -o /tmp/monitoring-maxval-install.sh
-bash /tmp/monitoring-maxval-install.sh
-rm -f /tmp/monitoring-maxval-install.sh
-unset MONITORING_GITHUB_TOKEN
+curl -fsSL https://raw.githubusercontent.com/maxvalrus/monitoring-maxval/main/scripts/install-from-github.sh | bash
 ```
 
 Скрипт откажется устанавливать проект в непустой каталог, создаст новый `.env` с
@@ -85,8 +72,8 @@ unset MONITORING_GITHUB_TOKEN
 ./scripts/update-from-github.sh
 ```
 
-Updater запрашивает временный token, по умолчанию создаёт проверенный PostgreSQL dump,
-принимает только fast-forward update и сохраняет `.env`, `tls/`, backup-данные и Docker
+Updater по умолчанию создаёт проверенный PostgreSQL dump, принимает только fast-forward
+update и сохраняет `.env`, `tls/`, backup-данные и Docker
 volumes. Подробности и ограничения — в
 [`docs/decisions/github-installers.md`](docs/decisions/github-installers.md).
 

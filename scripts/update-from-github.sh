@@ -5,12 +5,7 @@ set -Eeuo pipefail
 
 readonly DEFAULT_REF="main"
 
-github_token="${MONITORING_GITHUB_TOKEN:-}"
-git_askpass=""
-
 cleanup() {
-    [ -n "$git_askpass" ] && rm -f "$git_askpass"
-    unset MONITORING_GITHUB_TOKEN github_token
 }
 trap cleanup EXIT
 
@@ -32,25 +27,6 @@ confirm() {
     local answer
     read -r -p "$prompt [Y/n]: " answer
     [[ -z "$answer" || "$answer" =~ ^([yY]|[yY][eE][sS]|[дД]|[дД][аА])$ ]]
-}
-
-setup_git_auth() {
-    if [ -z "$github_token" ]; then
-        read -r -s -p "GitHub token (Contents: Read, ввод не отображается): " github_token
-        printf '\n'
-    fi
-    [ -n "$github_token" ] || fail "Для приватного репозитория нужен GitHub token с правом Contents: Read."
-
-    git_askpass="$(mktemp "${TMPDIR:-/tmp}/monitoring-maxval-git-askpass.XXXXXX")"
-    chmod 700 "$git_askpass"
-    printf '%s\n' '#!/bin/sh' \
-        'case "$1" in' \
-        '  *Username*) printf "%s" "x-access-token" ;;' \
-        '  *) printf "%s" "$MONITORING_GITHUB_TOKEN" ;;' \
-        'esac' > "$git_askpass"
-    export MONITORING_GITHUB_TOKEN="$github_token"
-    export GIT_ASKPASS="$git_askpass"
-    export GIT_TERMINAL_PROMPT=0
 }
 
 wait_for_ready() {
@@ -85,7 +61,6 @@ main() {
         run_root ./scripts/backup_database.sh
     fi
 
-    setup_git_auth
     printf '%s\n' 'Получение обновления из GitHub…'
     git fetch --prune origin "$DEFAULT_REF"
     git merge --ff-only "origin/$DEFAULT_REF"
