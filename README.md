@@ -58,13 +58,14 @@ sudo docker compose exec app python scripts/seed_demo.py
 интерактивный установщик. Выполните от обычного пользователя с `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/maxvalrus/monitoring-maxval/main/scripts/install-from-github.sh | bash
+curl -fsSL https://raw.githubusercontent.com/maxvalrus/monitoring-maxval/a1215c1/scripts/install-from-github.sh | bash
 ```
 
 Скрипт откажется устанавливать проект в непустой каталог, создаст новый `.env` с
 уникальными секретами, развернёт контейнеры и проверит `/health/ready`. Docker он
 намеренно не устанавливает автоматически: это системное действие остаётся под
-контролем владельца хоста.
+контролем владельца хоста. Ссылка зафиксирована на проверенной версии установщика;
+сам проект при установке клонируется из актуальной ветки `main`.
 
 Для обновления существующего Git-клона используйте из его каталога:
 
