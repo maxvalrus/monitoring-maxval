@@ -61,7 +61,7 @@ sudo docker compose exec app python scripts/seed_demo.py
 Выполните от обычного пользователя с `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/maxvalrus/monitoring-maxval/a1215c1/scripts/install-from-github.sh | bash
+curl -fsSL https://raw.githubusercontent.com/maxvalrus/monitoring-maxval/fc6e531/scripts/install-from-github.sh | bash
 ```
 
 Скрипт откажется устанавливать проект в непустой каталог, создаст новый `.env` с
