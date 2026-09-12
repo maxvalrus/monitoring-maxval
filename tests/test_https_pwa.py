@@ -98,6 +98,8 @@ def test_tls_manager_reports_the_actual_tail_of_openssl_error(
     source = (ROOT / "tls-manager/app.py").read_text(encoding="utf-8")
     assert '"rsa:3072", "-sha256", "-days", "3650", "-quiet"' in source
     assert '"rsa:2048", "-nodes", "-quiet", "-keyout"' in source
+    assert '"[req]\\ndistinguished_name=req_dn' in source
+    assert '"[req]\\\\ndistinguished_name=req_dn' not in source
 
 
 def test_pwa_manifest_and_cache_are_static_only() -> None:

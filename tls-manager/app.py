@@ -201,7 +201,14 @@ def _create_internal_candidate(request: InternalCertificateRequest) -> str:
         _run("openssl", "req", "-x509", "-new", "-nodes", "-newkey", "rsa:3072", "-sha256", "-days", "3650", "-quiet", "-keyout", str(CA_PRIVATE_KEY), "-out", str(CA_CERTIFICATE), "-subj", "/CN=Monitoring Maxval Internal CA")
         os.chmod(CA_PRIVATE_KEY, 0o600)
     config = TLS_ROOT / "internal-ca-openssl.cnf"
-    _write(config, "[req]\\ndistinguished_name=req_dn\\nreq_extensions=v3_req\\nprompt=no\\n[req_dn]\\nCN=" + common_name + "\\n[v3_req]\\nsubjectAltName=" + ",".join(san_values) + "\\nkeyUsage=critical,digitalSignature,keyEncipherment\\nextendedKeyUsage=serverAuth\\n")
+    _write(
+        config,
+        "[req]\ndistinguished_name=req_dn\nreq_extensions=v3_req\nprompt=no\n[req_dn]\nCN="
+        + common_name
+        + "\n[v3_req]\nsubjectAltName="
+        + ",".join(san_values)
+        + "\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n",
+    )
     try:
         _run("openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes", "-quiet", "-keyout", str(CANDIDATE_PRIVATE_KEY), "-out", str(TLS_ROOT / "internal-server.csr"), "-config", str(config))
         _run("openssl", "x509", "-req", "-in", str(TLS_ROOT / "internal-server.csr"), "-CA", str(CA_CERTIFICATE), "-CAkey", str(CA_PRIVATE_KEY), "-CAcreateserial", "-out", str(CANDIDATE_CERTIFICATE), "-days", "825", "-sha256", "-extfile", str(config), "-extensions", "v3_req")
