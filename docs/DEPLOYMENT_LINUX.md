@@ -27,7 +27,7 @@
 cd /opt/monitoring-maxval
 sudo chown -R "$USER":"$USER" /opt/monitoring-maxval
 chmod 600 .env
-sudo docker compose config --quiet
+sudo docker compose config >/dev/null
 sudo docker compose up -d --build
 ```
 
@@ -152,7 +152,7 @@ sudo ./scripts/backup_database.sh
 
 ```bash
 cd /opt/monitoring-maxval
-sudo docker compose config --quiet
+sudo docker compose config >/dev/null
 sudo docker compose build app tls-manager
 sudo docker compose up -d
 sudo docker compose exec app alembic upgrade head

@@ -96,7 +96,7 @@ python scripts/test_suite.py module <модуль>
 ruff check .
 python -m compileall -q src tests
 python scripts/test_suite.py full
-docker compose config --quiet
+docker compose config >/dev/null
 docker compose build app
 docker compose run --rm app alembic upgrade head
 curl --fail http://127.0.0.1:8000/health/ready

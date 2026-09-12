@@ -52,6 +52,44 @@ curl --fail http://127.0.0.1:8000/health/ready
 sudo docker compose exec app python scripts/seed_demo.py
 ```
 
+## Установка и обновление из GitHub
+
+Для нового сервера с Docker Engine, Docker Compose v2, Git, curl и openssl есть
+интерактивный установщик. Репозиторий приватный, поэтому предварительно создайте
+fine-grained GitHub token с единственным правом **Contents: Read** для
+`maxvalrus/monitoring-maxval`. Токен не сохраняется в проекте.
+
+Выполните в терминале от обычного пользователя с `sudo` (команда запросит token без
+отображения, каталог установки, разрешённые Host и демоданные):
+
+```bash
+read -rsp 'GitHub token: ' MONITORING_GITHUB_TOKEN; echo
+export MONITORING_GITHUB_TOKEN
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer ${MONITORING_GITHUB_TOKEN}" \
+  https://raw.githubusercontent.com/maxvalrus/monitoring-maxval/main/scripts/install-from-github.sh \
+  -o /tmp/monitoring-maxval-install.sh
+bash /tmp/monitoring-maxval-install.sh
+rm -f /tmp/monitoring-maxval-install.sh
+unset MONITORING_GITHUB_TOKEN
+```
+
+Скрипт откажется устанавливать проект в непустой каталог, создаст новый `.env` с
+уникальными секретами, развернёт контейнеры и проверит `/health/ready`. Docker он
+намеренно не устанавливает автоматически: это системное действие остаётся под
+контролем владельца хоста.
+
+Для обновления существующего Git-клона используйте из его каталога:
+
+```bash
+./scripts/update-from-github.sh
+```
+
+Updater запрашивает временный token, по умолчанию создаёт проверенный PostgreSQL dump,
+принимает только fast-forward update и сохраняет `.env`, `tls/`, backup-данные и Docker
+volumes. Подробности и ограничения — в
+[`docs/decisions/github-installers.md`](docs/decisions/github-installers.md).
+
 ## HTTPS и PWA
 
 HTTP остаётся рабочим режимом по умолчанию. В разделе «Настройки → HTTPS» можно:
