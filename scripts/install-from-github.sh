@@ -31,6 +31,10 @@ require_command() {
     command -v "$1" >/dev/null 2>&1 || fail "Не найдена команда $1. $2"
 }
 
+docker_compose_ready() {
+    command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1
+}
+
 prompt_value() {
     local prompt="$1"
     local default_value="$2"
@@ -44,6 +48,60 @@ confirm() {
     local answer
     read -r -p "$prompt [y/N]: " answer
     [[ "$answer" =~ ^([yY]|[yY][eE][sS]|[дД]|[дД][аА])$ ]]
+}
+
+confirm_default_yes() {
+    local prompt="$1"
+    local answer
+    read -r -p "$prompt [Y/n]: " answer
+    [[ -z "$answer" || "$answer" =~ ^([yY]|[yY][eE][sS]|[дД]|[дД][аА])$ ]]
+}
+
+install_host_dependencies() {
+    if docker_compose_ready \
+        && command -v git >/dev/null 2>&1 \
+        && command -v curl >/dev/null 2>&1 \
+        && command -v openssl >/dev/null 2>&1; then
+        return
+    fi
+
+    [ -r /etc/os-release ] || fail 'Поддерживаются Debian и Ubuntu с apt; ОС определить не удалось.'
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    case "${ID:-}" in
+        debian|ubuntu) ;;
+        *) fail "Автоматическая установка пока поддерживает Debian/Ubuntu, обнаружена: ${PRETTY_NAME:-неизвестная ОС}." ;;
+    esac
+
+    printf '%s\n' 'Не найдены все необходимые компоненты хоста.'
+    printf '%s\n' 'Будут установлены Git, curl, openssl, Docker Engine и Docker Compose v2 из официального репозитория Docker.'
+    confirm_default_yes 'Установить зависимости автоматически?' || fail 'Установка отменена пользователем.'
+
+    local package
+    for package in docker.io docker-compose docker-compose-v2 podman-docker containerd runc; do
+        if dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null | grep -qx installed; then
+            fail "Обнаружен конфликтующий пакет $package. Скрипт не удаляет системные пакеты автоматически. Удалите его вручную или установите Docker Compose v2 отдельно."
+        fi
+    done
+
+    run_root apt-get update
+    run_root apt-get install -y ca-certificates curl git gnupg openssl
+    run_root install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL "https://download.docker.com/linux/${ID}/gpg" \
+        | run_root gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
+    run_root chmod a+r /etc/apt/keyrings/docker.gpg
+
+    local architecture codename
+    architecture="$(dpkg --print-architecture)"
+    codename="${VERSION_CODENAME:-}"
+    [ -n "$codename" ] || fail 'Не удалось определить codename Debian/Ubuntu.'
+    printf '%s\n' \
+        "deb [arch=${architecture} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${ID} ${codename} stable" \
+        | run_root tee /etc/apt/sources.list.d/docker.list >/dev/null
+    run_root apt-get update
+    run_root apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    run_root systemctl enable --now docker
+    run_root docker compose version >/dev/null || fail 'Docker Compose v2 не запустился после установки.'
 }
 
 generate_secret() {
@@ -87,11 +145,12 @@ wait_for_ready() {
 }
 
 main() {
-    require_command git 'Установите Git и повторите запуск.'
-    require_command curl 'Установите curl и повторите запуск.'
-    require_command openssl 'Установите openssl и повторите запуск.'
-    require_command docker 'Установите Docker Engine и Docker Compose v2, затем повторите запуск.'
-    docker compose version >/dev/null 2>&1 || fail 'Нужен Docker Compose v2 (команда: docker compose).'
+    install_host_dependencies
+    require_command git 'Не удалось установить Git.'
+    require_command curl 'Не удалось установить curl.'
+    require_command openssl 'Не удалось установить openssl.'
+    require_command docker 'Не удалось установить Docker Engine.'
+    docker compose version >/dev/null 2>&1 || fail 'Не удалось установить Docker Compose v2.'
 
     printf '%s\n' 'Установка Monitoring Maxval из GitHub.'
     printf '%s\n' 'Будет создана новая установка. Для обновления существующей используйте scripts/update-from-github.sh.'
