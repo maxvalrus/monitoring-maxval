@@ -82,6 +82,20 @@ update и сохраняет `.env`, `tls/`, backup-данные и Docker
 volumes. Подробности и ограничения — в
 [`docs/decisions/github-installers.md`](docs/decisions/github-installers.md).
 
+## Удаление
+
+Удаление запускается только из уже установленного каталога:
+
+```bash
+cd /opt/monitoring-maxval
+./scripts/uninstall.sh
+```
+
+Скрипт сначала останавливает контейнеры. Затем отдельными подтверждениями предлагает
+удалить Docker volumes с PostgreSQL/backup, локальные TLS certificate/private key и
+исходный каталог. Без точных фраз `DELETE DATA`, `DELETE TLS` и `DELETE PROJECT`
+соответствующие данные не удаляются.
+
 ## HTTPS и PWA
 
 HTTP остаётся рабочим режимом по умолчанию. В разделе «Настройки → HTTPS» можно:
