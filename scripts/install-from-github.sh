@@ -65,12 +65,18 @@ install_host_dependencies() {
         return
     fi
 
-    [ -r /etc/os-release ] || fail 'Поддерживаются Debian и Ubuntu с apt; ОС определить не удалось.'
+    [ -r /etc/os-release ] || fail 'Поддерживаются Debian, Ubuntu и Linux Mint с apt; ОС определить не удалось.'
     # shellcheck disable=SC1091
     . /etc/os-release
+    local docker_distribution
     case "${ID:-}" in
-        debian|ubuntu) ;;
-        *) fail "Автоматическая установка пока поддерживает Debian/Ubuntu, обнаружена: ${PRETTY_NAME:-неизвестная ОС}." ;;
+        debian|ubuntu)
+            docker_distribution="$ID"
+            ;;
+        linuxmint)
+            docker_distribution='ubuntu'
+            ;;
+        *) fail "Автоматическая установка пока поддерживает Debian/Ubuntu/Linux Mint, обнаружена: ${PRETTY_NAME:-неизвестная ОС}." ;;
     esac
 
     printf '%s\n' 'Не найдены все необходимые компоненты хоста.'
@@ -87,16 +93,16 @@ install_host_dependencies() {
     run_root apt-get update
     run_root apt-get install -y ca-certificates curl git gnupg openssl
     run_root install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL "https://download.docker.com/linux/${ID}/gpg" \
+    curl -fsSL "https://download.docker.com/linux/${docker_distribution}/gpg" \
         | run_root gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
     run_root chmod a+r /etc/apt/keyrings/docker.gpg
 
     local architecture codename
     architecture="$(dpkg --print-architecture)"
-    codename="${VERSION_CODENAME:-}"
+    codename="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
     [ -n "$codename" ] || fail 'Не удалось определить codename Debian/Ubuntu.'
     printf '%s\n' \
-        "deb [arch=${architecture} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${ID} ${codename} stable" \
+        "deb [arch=${architecture} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${docker_distribution} ${codename} stable" \
         | run_root tee /etc/apt/sources.list.d/docker.list >/dev/null
     run_root apt-get update
     run_root apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin

@@ -10,8 +10,11 @@ def test_github_install_script_clones_public_source_and_generates_local_env() ->
     assert "MONITORING_GITHUB_TOKEN" not in script
     assert "install_host_dependencies" in script
     assert "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" in script
-    assert "debian|ubuntu" in script
-    assert "download.docker.com/linux/${ID}/gpg" in script
+    assert "debian|ubuntu)" in script
+    assert "linuxmint)" in script
+    assert "docker_distribution='ubuntu'" in script
+    assert "download.docker.com/linux/${docker_distribution}/gpg" in script
+    assert "UBUNTU_CODENAME" in script
     assert "MONITORING_DATABASE_URL=postgresql+psycopg://monitoring:${database_password}@db:5432/monitoring" in script
     assert "install -m 600 \"$install_dir/caddy/Caddyfile.example\"" in script
     assert "seed_demo.py" in script

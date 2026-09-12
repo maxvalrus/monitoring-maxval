@@ -54,7 +54,7 @@ sudo docker compose exec app python scripts/seed_demo.py
 
 ## Установка и обновление из GitHub
 
-Для нового Debian/Ubuntu-сервера есть интерактивный установщик. Он сам предложит
+Для нового Debian/Ubuntu/Linux Mint-сервера есть интерактивный установщик. Он сам предложит
 установить Git, curl, openssl, Docker Engine и Docker Compose v2 из официального
 репозитория Docker, затем запросит только параметры Monitoring Maxval.
 
