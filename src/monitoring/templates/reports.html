@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% from "_sortable_header.html" import sortable_header %}
+{% from "_section_icon.html" import section_icon %}
+{% block title %}Отчёты · Мониторинг Maxval{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">История</p><div class="page-title-row">{{ section_icon('reports') }}<h1>Доступность</h1></div><p class="muted">Доля успешных проверок объектов и площадок за выбранный период. Нерабочие часы не участвуют в расчёте.</p></div></section>
+
+<form method="get" class="panel filter-bar" aria-label="Параметры отчёта">
+  <div class="filter-panel-heading"><h2>Фильтр</h2></div>
+  <input type="hidden" name="per_page" value="{{ pager.per_page }}">
+  <label>Период<select name="hours"><option value="24" {{ 'selected' if selected_hours == 24 else '' }}>24 часа</option><option value="168" {{ 'selected' if selected_hours == 168 else '' }}>7 дней</option><option value="720" {{ 'selected' if selected_hours == 720 else '' }}>30 дней</option><option value="2160" {{ 'selected' if selected_hours == 2160 else '' }}>90 дней</option></select></label>
+  <label>Площадка<select name="site_id"><option value="0">Все площадки</option>{% for site in sites %}<option value="{{ site.id }}" {{ 'selected' if selected_site == site.id else '' }}>{{ site.name }}</option>{% endfor %}</select></label>
+  <label>Тип объекта<select name="kind"><option value="all">Все типы</option>{% for value, label in kind_options %}<option value="{{ value }}" {{ 'selected' if selected_kind == value else '' }}>{{ label }}</option>{% endfor %}</select></label>
+  <div class="filter-actions"><button class="button" type="submit">Показать</button><a class="button button-secondary" href="/reports?per_page={{ pager.per_page }}">Сбросить</a></div>
+</form>
+
+<div class="export-bar" aria-label="Экспорт отчёта доступности">
+  <span class="muted">Экспорт текущего отчёта:</span>
+  <a class="button button-secondary" href="/reports/export/xlsx?{{ report_export_query }}">XLSX</a>
+  <a class="button button-secondary" href="/reports/export/pdf?{{ report_export_query }}">PDF</a>
+</div>
+
+<section class="panel table-wrap report-section">
+  <div class="panel-heading"><h2>Площадки</h2><p class="muted">Сводные показатели всех объектов площадки</p></div>
+  <table class="entity-table responsive-table report-site-table"><thead><tr>
+    {{ sortable_header(request, 'Площадка', 'site', site_sort_state.column, site_sort_state.direction, 'site_sort', 'site_direction') }}
+    {{ sortable_header(request, 'Успешно', 'up', site_sort_state.column, site_sort_state.direction, 'site_sort', 'site_direction') }}
+    {{ sortable_header(request, 'Ошибки', 'down', site_sort_state.column, site_sort_state.direction, 'site_sort', 'site_direction') }}
+    {{ sortable_header(request, 'Нет данных', 'unknown', site_sort_state.column, site_sort_state.direction, 'site_sort', 'site_direction') }}
+    {{ sortable_header(request, 'Доступность', 'availability', site_sort_state.column, site_sort_state.direction, 'site_sort', 'site_direction') }}
+  </tr></thead><tbody>
+  {% for row in site_rows %}<tr><td data-label="Площадка"><strong>{{ row.site_name }}</strong></td><td data-label="Успешно">{{ row.up_count }}</td><td data-label="Ошибки">{{ row.down_count }}</td><td data-label="Нет данных">{{ row.unknown_count }}</td><td data-label="Доступность"><span class="badge {{ 'badge-success' if row.availability is not none and row.availability >= 99 else 'badge-warning' if row.availability is not none and row.availability >= 95 else 'badge-danger' }}">{{ ('%.2f%%'|format(row.availability)) if row.availability is not none else 'Нет данных' }}</span></td></tr>
+  {% else %}<tr><td colspan="5" class="empty-state">Для выбранных фильтров площадок нет.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+
+<section class="panel table-wrap report-section">
+  <div class="panel-heading"><h2>Объекты</h2><p class="muted">Неизвестные результаты показаны отдельно и не уменьшают процент доступности.</p></div>
+  <table class="entity-table responsive-table report-table"><thead><tr>{{ sortable_header(request, 'Площадка', 'site', sort_state.column, sort_state.direction) }}{{ sortable_header(request, 'Объект', 'target', sort_state.column, sort_state.direction) }}{{ sortable_header(request, 'Тип', 'kind', sort_state.column, sort_state.direction) }}{{ sortable_header(request, 'Успешно', 'up', sort_state.column, sort_state.direction) }}{{ sortable_header(request, 'Ошибки', 'down', sort_state.column, sort_state.direction) }}{{ sortable_header(request, 'Нет данных', 'unknown', sort_state.column, sort_state.direction) }}{{ sortable_header(request, 'Доступность', 'availability', sort_state.column, sort_state.direction) }}</tr></thead><tbody>
+  {% for row in report_rows %}<tr><td data-label="Площадка">{{ row.site_name }}</td><td data-label="Объект"><strong><a class="detail-title-link" href="/targets/{{ row.target_id }}/history?hours={{ selected_hours }}"><span class="detail-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.8"></circle><path d="m15 15 5 5"></path></svg></span><span>{{ row.target_name }}</span></a></strong></td><td data-label="Тип">{{ kind_labels.get(row.kind, row.kind) }}</td><td data-label="Успешно">{{ row.up_count }}</td><td data-label="Ошибки">{{ row.down_count }}</td><td data-label="Нет данных">{{ row.unknown_count }}</td><td data-label="Доступность"><span class="badge {{ 'badge-success' if row.availability is not none and row.availability >= 99 else 'badge-warning' if row.availability is not none and row.availability >= 95 else 'badge-danger' }}">{{ ('%.2f%%'|format(row.availability)) if row.availability is not none else 'Нет данных' }}</span></td></tr>
+  {% else %}<tr><td colspan="7" class="empty-state">Объектов нет.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{{ pagination(request, pager) }}
+{% endblock %}

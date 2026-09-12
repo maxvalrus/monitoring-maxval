@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}SNMP-пороги · {{ target.name }} · Мониторинг Maxval{% endblock %}
+{% block content %}
+<div class="snmp-page snmp-thresholds-page">
+<section class="page-heading snmp-heading">
+  <div>
+    <p class="eyebrow">SNMP · {{ target.name }}</p>
+    <div class="snmp-title-row"><span class="snmp-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M11 16v4"></path></svg></span><h1>Пороги</h1></div>
+    <p class="muted">Warning и Critical используют обычные инциденты Monitoring Maxval.</p>
+  </div>
+  <div class="page-heading-actions snmp-heading-actions">
+    <div class="snmp-header-icon-actions">
+      <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp" title="SNMP" aria-label="SNMP"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1"></rect><rect x="4" y="14" width="16" height="6" rx="1"></rect><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"></path></svg></a>
+      <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/interfaces" title="Интерфейсы" aria-label="Интерфейсы"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="6" height="6" rx="1"></rect><rect x="15" y="14" width="6" height="6" rx="1"></rect><path d="M9 7h3a3 3 0 0 1 3 3v4M9 17h3a3 3 0 0 0 3-3"></path></svg></a>
+      <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/supplies" title="Расходники" aria-label="Расходники"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V4h10v4M7 17h10v3H7z"></path><rect x="4" y="8" width="16" height="9" rx="2"></rect><path d="M8 12h.01"></path></svg></a>
+      {% if current_user.role == 'admin' %}<a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/discovery" title="OID Discovery" aria-label="OID Discovery"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="5"></circle><path d="m14 14 6 6M8 10h4M10 8v4"></path></svg></a>{% endif %}
+      <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/history" title="История доступности" aria-label="История доступности"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg></a>
+    </div>
+  </div>
+</section>
+
+{% if current_user.role == 'admin' %}
+<section class="panel snmp-threshold-form-panel">
+  <div class="panel-heading"><div><h2>{{ 'Изменить порог' if editing_threshold else 'Добавить порог' }}</h2><p class="muted">Достаточно заполнить Warning, Critical или оба значения.</p></div></div>
+  <form method="post" action="/targets/{{ target.id }}/snmp/thresholds{% if editing_threshold %}/{{ editing_threshold.id }}{% endif %}" class="snmp-threshold-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Источник
+      <select name="source" required>
+        {% for option in source_options %}
+        <option value="{{ option.value }}" {{ 'selected' if editing_source == option.value else '' }}>{{ option.label }}{% if option.unit %} · {{ option.unit }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Условие
+      <select name="operator">
+        <option value="gt" {{ 'selected' if not editing_threshold or editing_threshold.operator == 'gt' else '' }}>&gt;</option>
+        <option value="lt" {{ 'selected' if editing_threshold and editing_threshold.operator == 'lt' else '' }}>&lt;</option>
+      </select>
+    </label>
+    <label>Warning<input type="number" step="any" name="warning_value" value="{{ editing_threshold.warning_value if editing_threshold and editing_threshold.warning_value is not none else '' }}"></label>
+    <label>Critical<input type="number" step="any" name="critical_value" value="{{ editing_threshold.critical_value if editing_threshold and editing_threshold.critical_value is not none else '' }}"></label>
+    <label class="checkbox-row"><input type="checkbox" name="enabled" value="1" {{ 'checked' if not editing_threshold or editing_threshold.enabled else '' }}> Включён</label>
+    <div class="form-actions"><button class="button" type="submit">Сохранить</button>{% if editing_threshold %}<a class="button button-secondary" href="/targets/{{ target.id }}/snmp/thresholds">Отмена</a>{% endif %}</div>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel table-wrap">
+  <div class="panel-heading snmp-threshold-list-heading"><div><h2>Настроенные пороги</h2><p class="muted">Отсутствие свежих SNMP-данных не закрывает активный инцидент.</p></div>{% if current_user.role == 'admin' %}<form method="post" action="/targets/{{ target.id }}/snmp/thresholds/test"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="icon-action snmp-threshold-test-button" type="submit" title="Обновить данные и проверить пороги" aria-label="Обновить данные и проверить пороги">↻</button></form>{% endif %}</div>
+  <table class="entity-table responsive-table snmp-thresholds-table">
+    <thead><tr><th>Источник</th><th>Условие</th><th>Warning</th><th>Critical</th><th>Текущее</th><th>Последнее значение</th>{% if current_user.role == 'admin' %}<th>Действия</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for threshold in thresholds %}
+      <tr>
+        <td data-label="Источник">{{ threshold_labels[threshold.id] }}</td>
+        <td data-label="Условие">{{ '>' if threshold.operator == 'gt' else '<' }}</td>
+        <td data-label="Warning">{{ threshold.warning_value if threshold.warning_value is not none else '—' }}</td>
+        <td data-label="Critical">{{ threshold.critical_value if threshold.critical_value is not none else '—' }}</td>
+        <td data-label="Текущее">{% if not threshold.enabled %}<span class="badge badge-danger">Отключён</span>{% else %}<span class="badge {{ 'badge-danger' if threshold.current_level == 'critical' else 'badge-warning' if threshold.current_level == 'warning' else 'badge-success' }}">{{ 'Critical' if threshold.current_level == 'critical' else 'Warning' if threshold.current_level == 'warning' else 'Норма' }}</span>{% endif %}</td>
+        <td data-label="Последнее значение"><span class="snmp-threshold-last-value">{% if threshold.last_value is none %}—{% elif threshold.source_kind == 'interface' and threshold.field in ('rx_bps', 'tx_bps') %}{{ '%.2f'|format(threshold.last_value) }}{% else %}{{ threshold.last_value }}{% endif %}</span>{% if threshold.last_evaluated_at %}<small class="muted snmp-threshold-last-collected">{{ display_datetime(threshold.last_evaluated_at) }}</small>{% endif %}</td>
+        {% if current_user.role == 'admin' %}
+        <td data-label="Действия"><div class="snmp-threshold-actions">
+          <a class="icon-action" href="/targets/{{ target.id }}/snmp/thresholds?edit={{ threshold.id }}" title="Изменить порог" aria-label="Изменить порог">✎</a>
+          <form method="post" action="/targets/{{ target.id }}/snmp/thresholds/{{ threshold.id }}/toggle"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="icon-action" type="submit" title="{{ 'Отключить порог' if threshold.enabled else 'Включить порог' }}" aria-label="{{ 'Отключить порог' if threshold.enabled else 'Включить порог' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v10M6.2 5.4a8 8 0 1 0 11.6 0"></path></svg></button></form>
+          <form method="post" action="/targets/{{ target.id }}/snmp/thresholds/{{ threshold.id }}/delete" data-confirm="Удалить этот SNMP-порог?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="icon-action snmp-threshold-delete-button" type="submit" title="Удалить порог" aria-label="Удалить порог">×</button></form>
+        </div></td>
+        {% endif %}
+      </tr>
+    {% else %}
+      <tr><td colspan="{{ 7 if current_user.role == 'admin' else 6 }}" class="empty-state">Пороги ещё не настроены.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+</div>
+{% endblock %}

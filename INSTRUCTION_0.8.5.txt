@@ -1,0 +1,101 @@
+Monitoring Maxval 0.8.5 — обновление боевого сервера
+
+Важно
+
+- Выполняйте обновление в согласованное окно работ.
+- Не запускайте `docker compose down -v`: команда удаляет Docker volumes с рабочей
+  базой и backup-данными.
+- Не заменяйте рабочие `.env`, `caddy/Caddyfile` и каталог `tls/` файлами из релиза.
+- Full backup восстанавливается только в точно совпадающую версию приложения.
+
+1. Резервная копия
+
+  cd /opt/monitoring-maxval
+  sudo docker compose ps
+  sudo mkdir -p /var/backups/monitoring-maxval
+  sudo ./scripts/backup_database.sh /var/backups/monitoring-maxval/pre-0.8.5-$(date +%F-%H%M%S)
+
+Также создайте штатный full backup через «Настройки» → «Резервные копии» и скачайте
+его вне сервера. PostgreSQL-дамп нужен для полного восстановления этой установки.
+
+2. Проверка Docker Compose
+
+  if sudo docker compose version >/dev/null 2>&1; then
+    echo "Используется docker compose"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    echo "Используется docker-compose"
+  else
+    echo "Docker Compose не установлен"; exit 1
+  fi
+
+Далее используется `sudo docker compose`. Если доступна только старая команда,
+заменяйте её на `sudo docker-compose`.
+
+3. Распаковка в отдельный каталог
+
+  RELEASE_ZIP=/tmp/monitoring-maxval-0.8.5.zip
+  STAGE_DIR=$(mktemp -d /tmp/monitoring-maxval-0.8.5.XXXXXX)
+  unzip -q "$RELEASE_ZIP" -d "$STAGE_DIR"
+  RELEASE_DIR="$STAGE_DIR/monitoring-maxval-0.8.5"
+  test -f "$RELEASE_DIR/INSTRUCTION_0.8.5.txt" && echo "Архив распакован"
+
+4. Замена кода без замены секретов и TLS
+
+  sudo rsync -a \
+    --exclude='.env' \
+    --exclude='caddy/Caddyfile' \
+    --exclude='tls/' \
+    "$RELEASE_DIR/" /opt/monitoring-maxval/
+
+Проверьте, что рабочие файлы сохранены:
+
+  sudo test -f /opt/monitoring-maxval/.env
+  sudo test -f /opt/monitoring-maxval/caddy/Caddyfile
+  sudo test -d /opt/monitoring-maxval/tls
+
+5. Обновление контейнера
+
+  cd /opt/monitoring-maxval
+  sudo docker compose config >/dev/null && echo "Конфигурация Compose корректна"
+  sudo docker compose build app
+  sudo docker compose up -d --no-deps --force-recreate app
+  sudo docker compose exec -T app alembic upgrade head
+  sudo docker compose exec -T app alembic current
+  sudo docker compose ps
+
+Ожидаемая ревизия Alembic: `0036`.
+
+6. Smoke-проверка
+
+  curl -fsS http://127.0.0.1:8000/health/live
+  curl -fsS http://127.0.0.1:8000/health/ready
+  sudo docker compose logs --tail=150 app
+
+Если Caddy перенаправляет HTTP на HTTPS, используйте:
+
+  curl -fk https://127.0.0.1/health/live
+  curl -fk https://127.0.0.1/health/ready
+
+В `/health/live` должна отображаться версия `0.8.5`, `/health/ready` должен вернуть
+готовность базы. Откройте Wallboard на TV 1920×1080: телеметрия должна находиться в
+одной строке, а сводка статусов — рядом с серверными часами. В редакторе схемы
+проверьте Ctrl/⌘-выбор двух объектов и их совместное перемещение.
+
+Убедитесь, что объекты, история, SNMP, сервисы, TLS-настройки и рабочий сертификат
+сохранились.
+
+Необязательно: создать демонстрационные данные на чистой установке
+
+  sudo docker compose exec app python scripts/seed_demo.py
+
+7. Уборка временного каталога
+
+После успешной проверки:
+
+  sudo rm -rf "$STAGE_DIR"
+
+Откат
+
+Не используйте `alembic downgrade` как быстрый откат. При серьёзной ошибке восстановите
+PostgreSQL-дамп из шага 1 и тот же проверенный каталог кода 0.8.5. Full backup
+восстанавливается только внутри точно совпадающей версии приложения.

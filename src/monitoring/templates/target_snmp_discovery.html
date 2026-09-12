@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% block title %}{{ target.name }} · SNMP Discovery{% endblock %}
+{% block content %}
+<div class="snmp-page snmp-discovery-page">
+  <section class="page-heading snmp-heading">
+    <div>
+      <p class="eyebrow">SNMP · настройка телеметрии</p>
+      <div class="snmp-title-row"><span class="snmp-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="5"></circle><path d="m14 14 6 6M8 10h4M10 8v4"></path></svg></span><h1>Discovery · {{ target.name }}</h1></div>
+      <p class="muted">Ручной обход выбранной SNMP-ветки. Найденные OID не попадают в мониторинг, пока вы их явно не добавите.</p>
+    </div>
+    <div class="page-heading-actions snmp-heading-actions">
+      <div class="snmp-header-icon-actions">
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp" title="SNMP" aria-label="SNMP"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1"></rect><rect x="4" y="14" width="16" height="6" rx="1"></rect><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/interfaces" title="Интерфейсы" aria-label="Интерфейсы"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="6" height="6" rx="1"></rect><rect x="15" y="14" width="6" height="6" rx="1"></rect><path d="M9 7h3a3 3 0 0 1 3 3v4M9 17h3a3 3 0 0 0 3-3"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/supplies" title="Расходники" aria-label="Расходники"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V4h10v4M7 17h10v3H7z"></path><rect x="4" y="8" width="16" height="9" rx="2"></rect><path d="M8 12h.01"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/thresholds" title="Пороги" aria-label="Пороги"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M11 16v4"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/history" title="История доступности" aria-label="История доступности"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel snmp-discovery-scan-panel">
+    <div class="panel-heading snmp-panel-heading">
+      <div><h2>Область сканирования</h2><p class="muted">Discovery выполняется только вручную. Максимум {{ max_discovery_results }} OID за один запуск.</p></div>
+      <span class="badge">SNMP {{ config.version if config else 'v2c' }}</span>
+    </div>
+    <form method="post" action="/targets/{{ target.id }}/snmp/discovery/run" class="snmp-discovery-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="snmp-discovery-mode-grid">
+        <label class="radio-card"><input type="radio" name="mode" value="standard" checked><span><strong>Стандартные OID</strong><small>System + Interfaces + IF-MIB extensions</small></span></label>
+        <label class="radio-card"><input type="radio" name="mode" value="system"><span><strong>System</strong><small>1.3.6.1.2.1.1</small></span></label>
+        <label class="radio-card"><input type="radio" name="mode" value="interfaces"><span><strong>Interfaces</strong><small>1.3.6.1.2.1.2</small></span></label>
+        <label class="radio-card"><input type="radio" name="mode" value="if_mib"><span><strong>IF-MIB extensions</strong><small>1.3.6.1.2.1.31</small></span></label>
+        <label class="radio-card snmp-discovery-custom-card"><input type="radio" name="mode" value="custom"><span><strong>Произвольная ветка</strong><small>Например vendor OID</small></span></label>
+      </div>
+      <label class="snmp-discovery-custom-input">OID произвольной ветки<input name="custom_oid" maxlength="255" placeholder="1.3.6.1.4.1.14988"></label>
+      <div class="snmp-discovery-run-actions"><button class="button button-primary" type="submit" {{ 'disabled' if not config or not config.enabled else '' }}>Начать сканирование</button></div>
+      {% if not config or not config.enabled %}<p class="alert alert-warning">Сначала включите и настройте SNMP для объекта.</p>{% endif %}
+    </form>
+  </section>
+
+  {% if discovery %}
+  <section class="panel snmp-discovery-result-summary">
+    <div class="panel-heading snmp-panel-heading">
+      <div><h2>Результат Discovery</h2><p class="muted">Результат временный и не входит в backup. После перезапуска приложения или истечения сессии выполните сканирование заново.</p></div>
+      <div class="snmp-discovery-result-actions"><span class="badge {{ 'badge-warning' if discovery.truncated or discovery.status == 'partial' else 'badge-success' }}">{{ discovery.status }}</span><a class="button button-secondary button-compact" href="/targets/{{ target.id }}/snmp/discovery/export.json?token={{ discovery_token|urlencode }}" title="Скачать полный результат Discovery в JSON">Скачать JSON</a></div>
+    </div>
+    <dl class="target-current-settings-grid snmp-status-grid">
+      <div><dt>Найдено</dt><dd>{{ discovery.items|length }} OID</dd></div>
+      <div><dt>Время</dt><dd>{{ '%.2f'|format(discovery.elapsed_ms / 1000) }} сек.</dd></div>
+      <div><dt>Ветви</dt><dd>{% for root in discovery.roots %}<code>{{ root }}</code>{% if not loop.last %}<br>{% endif %}{% endfor %}</dd></div>
+    </dl>
+    {% if discovery.truncated %}<div class="alert alert-warning">Сканирование было ограничено. Для более точного результата выберите более узкую ветку.</div>{% endif %}
+  </section>
+
+  <section class="panel snmp-discovery-results-panel">
+    <div class="panel-heading snmp-panel-heading">
+      <div><h2>Найденные OID</h2><p class="muted">Ручных метрик сейчас {{ metric_count }} из 32. Можно добавить ещё {{ metric_remaining }}.</p></div>
+    </div>
+    <div class="filter-panel-heading snmp-filter-panel-heading"><h3>Фильтр</h3></div>
+    <form method="get" class="snmp-discovery-filters">
+      <input type="hidden" name="token" value="{{ discovery_token }}">
+      <label>Поиск<input type="search" name="q" value="{{ discovery_query }}" placeholder="Имя, OID или значение"></label>
+      <label>Категория<select name="category"><option value="">Все категории</option>{% for category_key, category_label in discovery_categories.items() %}<option value="{{ category_key }}" {{ 'selected' if discovery_category == category_key else '' }}>{{ category_label }}</option>{% endfor %}</select></label>
+      <label>Тип<select name="type"><option value="">Все типы</option>{% for item_type in discovery_types %}<option value="{{ item_type }}" {{ 'selected' if discovery_type == item_type else '' }}>{{ item_type }}</option>{% endfor %}</select></label>
+      <label>Состояние<select name="state"><option value="all" {{ 'selected' if discovery_state == 'all' else '' }}>Все</option><option value="new" {{ 'selected' if discovery_state == 'new' else '' }}>Можно добавить</option><option value="monitored" {{ 'selected' if discovery_state == 'monitored' else '' }}>Уже мониторятся</option><option value="system" {{ 'selected' if discovery_state == 'system' else '' }}>Системные</option></select></label>
+      <label class="checkbox-label snmp-discovery-recommended-filter"><input type="checkbox" name="recommended" value="1" {{ 'checked' if discovery_recommended else '' }}><span>Только рекомендуемые</span></label>
+      <div class="form-actions"><button class="button button-secondary" type="submit">Применить</button></div>
+    </form>
+
+    <form method="post" action="/targets/{{ target.id }}/snmp/discovery/add" class="snmp-discovery-add-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="token" value="{{ discovery_token }}">
+      <div class="table-wrap entity-table-wrap">
+        <table class="entity-table responsive-table snmp-discovery-table">
+          <thead><tr><th><span class="sr-only">Выбор</span></th><th>Название</th><th>OID</th><th>Значение</th><th>Тип</th><th>Категория</th><th>Единица</th><th>Состояние</th></tr></thead>
+          <tbody>
+            {% for item in discovery_items %}
+            {% set row_index = loop.index0 %}
+            <tr>
+              <td data-label="Выбор"><input type="checkbox" name="selected_index" value="{{ row_index }}" {{ 'disabled' if not item.selectable or metric_remaining <= 0 else '' }} aria-label="Добавить OID {{ item.oid }}"></td>
+              <td data-label="Название"><input type="hidden" name="oid_{{ row_index }}" value="{{ item.oid }}">{% if item.selectable %}<input name="name_{{ row_index }}" maxlength="160" value="{{ item.name or '' }}" placeholder="Название метрики">{% else %}<strong>{{ item.name or '—' }}</strong>{% endif %}</td>
+              <td data-label="OID"><code title="{{ item.oid }}">{{ item.oid }}</code></td>
+              <td data-label="Значение"><span class="snmp-discovery-value" title="{{ item.value or '' }}">{{ item.value if item.value is not none else '—' }}</span></td>
+              <td data-label="Тип">{{ item.detected_type }}</td>
+              <td data-label="Категория"><span class="badge">{{ item.category_label }}</span>{% if item.recommended %}<span class="snmp-discovery-recommended-mark" title="Рекомендуемый OID" aria-label="Рекомендуемый OID">★</span>{% endif %}</td>
+              <td data-label="Единица">{% if item.selectable %}<input name="unit_{{ row_index }}" maxlength="80" placeholder="—">{% else %}—{% endif %}</td>
+              <td data-label="Состояние">{% if item.is_system %}<span class="badge">Системный</span>{% elif item.is_monitored %}<span class="badge badge-success">Уже мониторится</span>{% elif item.error %}<span class="badge badge-danger" title="{{ item.error }}">Ошибка</span>{% else %}<span class="badge badge-warning">Можно добавить</span>{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="empty-state">По текущему фильтру OID не найдены.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if discovery_items %}<div class="snmp-discovery-add-actions"><span class="muted">Добавление не сохраняет discovery-значение как исторический sample. Значения начнут собираться обычным SNMP polling.</span><button class="button button-primary" type="submit" {{ 'disabled' if metric_remaining <= 0 else '' }}>Добавить выбранные</button></div>{% endif %}
+    </form>
+    {{ pagination(request, discovery_pager) }}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

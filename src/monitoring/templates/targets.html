@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% from "_sortable_header.html" import sortable_header %}
+{% from "_target_tools.html" import target_tools %}
+{% from "_section_icon.html" import section_icon %}
+{% block title %}Объекты · Мониторинг Maxval{% endblock %}
+{% macro service_form(target, action, check=None) -%}
+<form method="post" action="{{ action }}" class="form-grid compact-form target-form service-form" data-target-id="{{ target.id }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="return_to" value="/targets?focus_target_id={{ target.id }}">
+  <label>Название сервиса<input name="name" value="{{ check.name if check else '' }}" required maxlength="160" placeholder="Например, RDP"></label>
+  <label>Проверка<select name="checker_type" data-checker-select>{% for checker in secondary_checker_names %}<option value="{{ checker }}" {{ 'selected' if check and check.checker_type == checker else '' }}>{{ checker }}</option>{% endfor %}</select></label>
+  <label data-address-field>Адрес / host <small class="muted">необязательно</small><input name="address_override" value="{{ check.address_override if check and check.address_override else '' }}" maxlength="255" placeholder="Адрес объекта"></label>
+  <label class="port-field" data-port-field {{ 'hidden' if check and check.checker_type in ['icmp', 'dns', 'directory'] else '' }}>Порт<input type="number" name="port" value="{{ '' if check and check.checker_type in ['icmp', 'dns', 'directory'] else (check.port if check and check.port is not none else '') }}" min="1" max="65535" data-port-input></label>
+  <label class="form-field-full" data-path-field {{ '' if not check or check.checker_type in ['http', 'https'] else 'hidden' }}>Путь<input name="path" value="{{ check.path if check else '/' }}" maxlength="500" placeholder="/"></label>
+  <label>Timeout, с <small class="muted">необязательно</small><input type="number" name="timeout_seconds" value="{{ check.timeout_seconds if check and check.timeout_seconds is not none else '' }}" min="0.5" max="60" step="0.1" placeholder="{{ default_check_timeout }}"></label>
+  <label>Повторы<input type="number" name="retries" value="{{ check.retries if check else 0 }}" min="0" max="10" required></label>
+  <section class="form-field-full dns-options" data-dns-options {{ '' if check and check.checker_type == 'dns' else 'hidden' }}>
+    <div class="form-grid compact-form dns-grid">
+      <label>DNS-имя<input name="dns_name" value="{{ check.dns_name if check and check.dns_name else '' }}" maxlength="253" placeholder="example.com"></label>
+      <label>Тип записи<select name="dns_record_type"><option value="A" {{ 'selected' if not check or check.dns_record_type in [none, 'A'] else '' }}>A (IPv4)</option><option value="AAAA" {{ 'selected' if check and check.dns_record_type == 'AAAA' else '' }}>AAAA (IPv6)</option></select></label>
+      <label>Ожидаемый IP <small class="muted">необязательно</small><input name="dns_expected_address" value="{{ check.dns_expected_address if check and check.dns_expected_address else '' }}" maxlength="45" placeholder="192.0.2.10"></label>
+      <label>Максимальное время ответа, мс <small class="muted">необязательно</small><input type="number" name="dns_max_response_ms" value="{{ check.dns_max_response_ms if check and check.dns_max_response_ms is not none else '' }}" min="0.1" step="0.1"></label>
+    </div>
+  </section>
+  <section class="form-field-full directory-check-options" data-directory-options {{ '' if check and check.checker_type == 'directory' else 'hidden' }}>
+    <div class="form-grid compact-form">
+      <label class="form-field-full">Путь к каталогу<input name="directory_path" value="{{ check.directory_path if check and check.directory_path else '' }}" maxlength="1024" placeholder="\\SERVER\Backups или /data/backups" autocomplete="off"><small class="muted">Локальный путь должен быть доступен внутри контейнера. Для Windows используйте UNC-путь к общей папке.</small></label>
+      <label>Маска файлов<input name="directory_pattern" value="{{ check.directory_pattern if check and check.directory_pattern else '*' }}" maxlength="255" placeholder="*.bak"></label>
+      <label>Контрольный период, часов<input type="number" name="directory_period_hours" value="{{ check.directory_period_hours if check and check.directory_period_hours is not none else 24 }}" min="0.1" step="0.1"></label>
+      <label>Показывать последних файлов<small class="muted">0 — показать все найденные файлы.</small><input type="number" name="directory_show_last" value="{{ check.directory_show_last if check and check.directory_show_last is not none else 0 }}" min="0" step="1"></label>
+      <div class="form-field-full form-grid compact-form" data-directory-smb-credentials>
+        <label>SMB пользователь <small class="muted">необязательно</small><input name="directory_username" value="{{ check.directory_username if check and check.directory_username else '' }}" maxlength="255" autocomplete="username"></label>
+        <label>SMB пароль <small class="muted">необязательно</small><input type="password" name="directory_password" value="" autocomplete="new-password" placeholder="{{ 'Оставьте пустым, чтобы не менять' if check else '' }}"></label>
+      </div>
+      <p class="muted form-field-full">Проверка успешна, если за указанный период найден хотя бы один файл по маске. Каталог не обходится рекурсивно и файлы не читаются.</p>
+    </div>
+  </section>
+  <details class="form-field-full http-deep-options" data-http-deep-options {{ 'open' if check and check.checker_type in ['http', 'https'] and (check.http_expected_status is not none or check.http_content_contains or check.http_content_not_contains or check.http_max_response_ms is not none) else '' }}>
+    <summary><span class="http-deep-summary-label">Дополнительная проверка HTTP <small class="muted">необязательно</small><span class="http-deep-summary-chevron" aria-hidden="true">⌄</span></span><button class="help-trigger" type="button" aria-label="Справка по дополнительной проверке HTTP" data-help-wide data-help="Дополнительная проверка применяется только к этому сервису HTTP или HTTPS и не меняет основную проверку доступности объекта.&#10;&#10;Ожидаемый HTTP-код: точный код ответа, например 200 или 204. Если поле пустое, коды 400 и выше считаются ошибкой по обычному правилу.&#10;&#10;Должно содержать / Не должно содержать: поиск текста в теле ответа. Используйте короткий устойчивый фрагмент страницы, а не динамические данные.&#10;&#10;Максимальное время ответа: сервис будет считаться ошибочным, если полный HTTP-ответ получен позже указанного порога.&#10;&#10;Все критерии проверяются одним HTTP-запросом. Если оставить поля пустыми, сохраняется обычная проверка HTTP/HTTPS.">?</button></summary>
+    <div class="form-grid compact-form http-deep-grid">
+      <label>Ожидаемый HTTP-код <small class="muted">необязательно</small><input type="number" name="expected_status" value="{{ check.http_expected_status if check and check.http_expected_status is not none else '' }}" min="100" max="599" step="1" data-http-deep-field></label>
+      <label>Максимальное время отклика, мс <small class="muted">необязательно; текущий замер можно увеличить с запасом</small><span class="http-status-code-control"><input type="number" name="max_response_ms" value="{{ check.http_max_response_ms if check and check.http_max_response_ms is not none else '' }}" min="1" step="0.1" data-http-deep-field><button class="button button-secondary" type="button" data-current-http-status title="Получить текущие код и время ответа по адресу, порту и пути из формы">Получить текущее</button></span></label>
+      <label class="form-field-full">Должно содержать <small class="muted">необязательно</small><input name="content_contains" maxlength="500" value="{{ check.http_content_contains if check and check.http_content_contains else '' }}" placeholder="Например: 1С:Предприятие" data-http-deep-field></label>
+      <label class="form-field-full">Не должно содержать <small class="muted">необязательно</small><input name="content_not_contains" maxlength="500" value="{{ check.http_content_not_contains if check and check.http_content_not_contains else '' }}" placeholder="Например: Database unavailable" data-http-deep-field></label>
+      <p class="muted form-field-full">Если все поля пустые, HTTP/HTTPS работает по текущей базовой схеме.</p>
+    </div>
+  </details>
+  <details class="form-field-full tls-monitor-options" data-tls-monitor-options {{ 'open' if check and check.tls_monitor_enabled else '' }}>
+    <summary><span class="http-deep-summary-label">Мониторинг сертификата <small class="muted">необязательно</small><span class="http-deep-summary-chevron" aria-hidden="true">⌄</span></span><button class="help-trigger" type="button" aria-label="Справка по мониторингу сертификата" data-help-wide data-help="Мониторинг сертификата доступен только для дополнительного HTTPS-сервиса и не меняет доступность основного объекта.&#10;&#10;После успешной HTTPS-проверки система берёт срок действия из того же TLS-соединения — отдельный запрос не создаётся.&#10;&#10;Warning: за сколько дней до окончания открыть предупреждение. Critical: за сколько дней до окончания открыть критический инцидент. Warning должен быть больше Critical.&#10;&#10;Если сертификат истёк, его срок не меняет статус доступности HTTPS-сервиса, но создаёт отдельный TLS-инцидент и отправляет обычные уведомления.">?</button></summary>
+    <label class="checkbox-label tls-monitor-toggle"><input type="checkbox" name="tls_monitor_enabled" value="true" data-tls-monitor-enabled {{ 'checked' if check and check.tls_monitor_enabled else '' }}> Контролировать срок сертификата</label>
+    <div class="form-grid compact-form tls-monitor-thresholds" data-tls-thresholds>
+      <label>Warning, дней<input type="number" name="tls_warning_days" min="1" step="1" value="{{ check.tls_warning_days if check and check.tls_warning_days is not none else 30 }}" data-tls-monitor-field></label>
+      <label>Critical, дней<input type="number" name="tls_critical_days" min="0" step="1" value="{{ check.tls_critical_days if check and check.tls_critical_days is not none else 7 }}" data-tls-monitor-field></label>
+      <p class="muted form-field-full">HTTPS работает по текущей схеме. Пороги только добавляют Warning/Critical о приближении окончания сертификата.</p>
+    </div>
+  </details>
+  <div class="service-form-footer form-field-full"><p class="muted">Без адреса используется адрес объекта. Основная проверка настраивается выше.</p><button class="button button-primary" type="submit">{{ 'Сохранить сервис' if check else 'Добавить сервис' }}</button></div>
+</form>
+{%- endmacro %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">Мониторинг</p><div class="page-title-row">{{ section_icon('targets') }}<h1>Объекты</h1></div><p class="muted">Серверы, компьютеры, сеть, принтеры, камеры и сервисы.</p></div></section>
+
+<details class="panel help-panel"><summary>Как настроить проверку</summary>
+  <div class="help-content">
+    <p><strong>Тип объекта</strong> группирует оборудование в интерфейсе, а поле <strong>Проверка</strong> определяет реальный способ контроля.</p>
+    <ul>
+      <li><strong>TCP</strong> проверяет подключение к порту: HTTP 80, HTTPS 443, RDP 3389, PostgreSQL 5432, MikroTik WinBox 8291 или фактический порт сервиса.</li>
+      <li><strong>RTSP:</strong> выполняет лёгкий запрос к адресу потока на порту 554 без загрузки и декодирования видео. Укажите адрес как <code>192.168.1.20/stream1</code> или полный <code>rtsp://…</code> без логина и пароля.</li>
+      <li><strong>HTTP/HTTPS:</strong> проверяет ответ веб-сервера; HTTPS дополнительно сообщает срок действия TLS-сертификата.</li>
+      <li><strong>ICMP:</strong> проверяет ответ узла без привязки к порту; поле порта скрывается.</li>
+    </ul>
+    <p class="muted">Для TCP, HTTP, HTTPS и ICMP укажите IP или DNS без пути. Путь разрешён только для RTSP. Интервал меньше 300 секунд используйте только при необходимости.</p>
+  </div>
+</details>
+
+
+
+<form method="get" class="panel filter-bar" aria-label="Фильтры объектов">
+  <div class="filter-panel-heading"><h2>Фильтр</h2></div>
+  <input type="hidden" name="per_page" value="{{ pager.per_page }}">
+  <input type="hidden" name="sort" value="{{ sort_state.column }}">
+  <input type="hidden" name="direction" value="{{ sort_state.direction }}">
+  <label class="grow">Поиск<input name="q" value="{{ filters.q }}" maxlength="100" placeholder="Название, IP или DNS"></label>
+  <label>Площадка<select name="site_id"><option value="0">Все</option>{% for site in sites %}<option value="{{ site.id }}" {{ 'selected' if filters.site_id == site.id else '' }}>{{ site.name }}</option>{% endfor %}</select></label>
+  <label>Тип<select name="kind"><option value="all">Все</option>{% for kind in kinds %}<option value="{{ kind.value }}" {{ 'selected' if filters.kind == kind.value else '' }}>{{ kind.value }}</option>{% endfor %}</select></label>
+  <label>Проверка<select name="checker_type"><option value="all">Все</option>{% for checker in checker_names %}<option value="{{ checker }}" {{ 'selected' if filters.checker_type == checker else '' }}>{{ checker }}</option>{% endfor %}</select></label>
+  <label>Состояние<select name="enabled"><option value="all">Все</option><option value="true" {{ 'selected' if filters.enabled == 'true' else '' }}>Включены</option><option value="false" {{ 'selected' if filters.enabled == 'false' else '' }}>Отключены</option></select></label>
+  <label>Исключить из уведомлений<select name="notifications_suppressed"><option value="all">Все</option><option value="true" {{ 'selected' if filters.notifications_suppressed == 'true' else '' }}>Да</option><option value="false" {{ 'selected' if filters.notifications_suppressed == 'false' else '' }}>Нет</option></select></label>
+  <label>Избранное<select name="favorite"><option value="all">Все</option><option value="true" {{ 'selected' if filters.favorite == 'true' else '' }}>Да</option><option value="false" {{ 'selected' if filters.favorite == 'false' else '' }}>Нет</option></select></label>
+  <label>SNMP<select name="snmp_enabled"><option value="all">Все</option><option value="true" {{ 'selected' if filters.snmp_enabled == 'true' else '' }}>Отслеживается SNMP</option></select></label>
+  <div class="filter-actions">
+    <button class="button" type="submit">Применить</button>
+    <a class="button button-secondary" href="/targets?per_page={{ pager.per_page }}">Сбросить</a>
+  </div>
+</form>
+
+{% if current_user.role == 'admin' %}
+<section class="panel form-panel" id="target-create">
+  <h2>{{ 'Скопировать объект' if copy_source else 'Добавить объект' }}</h2>
+  {% if copy_source %}<p class="muted">Настройки, сервисы и определения SNMP перенесутся без истории, результатов и инцидентов. Измените название и адрес перед сохранением.</p>{% endif %}
+  {% if sites %}
+  <form method="post" action="/targets" class="form-grid target-form create-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+    {% if copy_source %}<input type="hidden" name="copy_target_id" value="{{ copy_source.id }}">{% endif %}
+    <label>Площадка<select name="site_id" required>{% for site in sites %}<option value="{{ site.id }}" {{ 'selected' if copy_source and site.id == copy_source.site_id }}>{{ site.name }}</option>{% endfor %}</select></label>
+    <label>Название<input name="name" required maxlength="160" value="{{ ('Копия ' ~ copy_source.name)[:160] if copy_source else '' }}"></label>
+    <label>Тип<select name="kind">{% for kind in kinds %}<option value="{{ kind.value }}" {{ 'selected' if copy_source and kind.value == copy_source.kind }}>{{ kind.value }}</option>{% endfor %}</select></label>
+    <label>Проверка<select name="checker_type" data-checker-select>{% for checker in checker_names %}<option value="{{ checker }}" {{ 'selected' if copy_source and checker == copy_source.checker_type }}>{{ checker }}</option>{% endfor %}</select></label>
+    <label>IP, DNS или RTSP-путь<input name="address" required maxlength="255" placeholder="192.168.1.10" value="{{ copy_source.address if copy_source else '' }}"></label>
+    <label class="port-field" data-port-field>Порт<input type="number" name="port" required min="1" max="65535" value="{{ copy_source.port if copy_source else 80 }}" data-port-input></label>
+    <label>Интервал, секунд<input type="number" name="interval_seconds" required min="60" max="86400" value="{{ copy_source.interval_seconds if copy_source else 300 }}"></label>
+    <label class="target-site-entry-option"><input type="checkbox" name="is_site_entry" value="true"><span>Точка входа площадки</span><button class="help-trigger" type="button" aria-label="Описание точки входа площадки" data-help-wide data-help="Точка входа — основной сетевой узел площадки: обычно роутер, VPN-шлюз или сервер, через который доступна остальная инфраструктура. Выбрать можно только объект типа «Сеть» или «Сервер»; для одной площадки разрешена одна точка входа.&#10;&#10;Когда её основная проверка недоступна, Monitoring Maxval временно не выполняет проверки остальных объектов этой площадки. Новые результаты и инциденты дочерних объектов не создаются, а уже имеющаяся история и открытые инциденты сохраняются. В интерфейсе такие объекты получают нейтральное состояние «Нет связи с площадкой».&#10;&#10;После успешной проверки точки входа обычный polling объектов площадки продолжается в том же цикле.">?</button></label>
+    <label class="form-field-full">Комментарий<textarea name="comment" rows="3" maxlength="1000" placeholder="Назначение, особенности подключения, ответственный или другое примечание">{{ copy_source.comment or '' if copy_source else '' }}</textarea></label>
+    <div class="target-form-footer">
+      <div class="target-form-options" aria-label="Дополнительные параметры объекта">
+        <label class="checkbox-label"><input type="checkbox" name="notifications_suppressed" value="true" {{ 'checked' if copy_source and copy_source.notifications_suppressed }}> Исключить из уведомлений</label>
+        <label class="checkbox-label"><input type="checkbox" name="favorite" value="true" {{ 'checked' if copy_source and copy_source.favorite }}> Избранный объект</label>
+      </div>
+      <div class="form-actions"><button class="button button-primary target-form-submit" type="submit">{{ 'Создать копию' if copy_source else 'Добавить' }}</button></div>
+    </div>
+  </form>
+  {% else %}<p class="muted">Сначала добавьте хотя бы одну площадку.</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="panel table-wrap entity-table-wrap">
+  <table class="entity-table targets-table responsive-table {{ 'targets-table-with-actions' if current_user.role == 'admin' else 'targets-table-without-actions' }}">
+    <thead><tr>
+      {{ sortable_header(request, 'Площадка', 'site', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Название', 'name', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Тип', 'kind', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Проверка', 'checker_type', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Адрес', 'address', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Порт', 'port', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Интервал', 'interval_seconds', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Состояние', 'enabled', sort_state.column, sort_state.direction) }}
+      {% if current_user.role == 'admin' %}<th class="actions-header">Действия</th>{% endif %}
+    </tr></thead>
+    <tbody>
+      {% for target, site in targets %}
+      <tr id="target-{{ target.id }}" class="target-table-row {{ 'entity-disabled' if not target.enabled else '' }}">
+        <td data-label="Площадка">{{ site.name }}</td>
+        <td data-label="Название"><div class="entity-name-cell"><strong>{% if target.favorite %}<span class="favorite-marker" title="Избранный объект" aria-label="Избранный объект">★</span> {% endif %}{{ target.name }}</strong><small class="entity-id">ID: {{ target.id }}</small></div>{{ target_tools(target, True, csrf_token if current_user.role == 'admin' else '', request.url.path ~ ('?' ~ request.url.query if request.url.query else '')) }}</td>
+        <td data-label="Тип">{{ target.kind }}</td>
+        <td data-label="Проверка"><code>{{ target.checker_type }}</code></td>
+        <td data-label="Адрес">{{ target.address }}</td><td data-label="Порт">{{ '—' if target.checker_type == 'icmp' else target.port }}</td><td data-label="Интервал">{{ target.interval_seconds }} с</td><td data-label="Состояние"><span class="badge {{ 'badge-success' if target.enabled else 'badge-danger' }}">{{ 'Включён' if target.enabled else 'Отключён' }}</span></td>
+        {% if current_user.role == 'admin' %}
+        <td class="actions-cell" data-label="Действия">
+          <div class="target-actions-layout">
+          <div class="table-actions target-table-actions">
+            <button class="icon-action target-table-action target-edit-button" type="button" data-table-editor-toggle="target-{{ target.id }}-editor" aria-controls="target-{{ target.id }}-editor" aria-expanded="{{ 'true' if focus_target_id == target.id else 'false' }}" title="Изменить объект" aria-label="Изменить объект {{ target.name }}">✎</button>
+            <a class="icon-action target-table-action" href="/targets?copy_target_id={{ target.id }}#target-create" title="Копировать объект" aria-label="Копировать объект {{ target.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="1"></rect><path d="M5 16H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"></path></svg></a>
+            <form method="post" action="/targets/{{ target.id }}/favorite">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+              <button class="icon-action target-table-action target-favorite-action {{ 'is-active' if target.favorite else '' }}" type="submit" aria-pressed="{{ 'true' if target.favorite else 'false' }}" title="{{ 'Убрать из избранного' if target.favorite else 'Добавить в избранное' }}" aria-label="{{ 'Убрать объект ' ~ target.name ~ ' из избранного' if target.favorite else 'Добавить объект ' ~ target.name ~ ' в избранное' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.8 2.5 5.1 5.6.8-4 3.9.9 5.5-5-2.7-5 2.7.9-5.5-4-3.9 5.6-.8z"></path></svg></button>
+            </form>
+            <form method="post" action="/targets/{{ target.id }}/toggle">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+              <button class="icon-action target-table-action target-toggle-action" type="submit" title="{{ 'Отключить объект' if target.enabled else 'Включить объект' }}" aria-label="{{ 'Отключить объект ' ~ target.name if target.enabled else 'Включить объект ' ~ target.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9"></path><path d="M7.1 5.8a8 8 0 1 0 9.8 0"></path></svg></button>
+            </form>
+            <form method="post" action="/targets/{{ target.id }}/delete" data-confirm="Удалить объект «{{ target.name }}» вместе с его результатами и инцидентами?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+              <button class="icon-action target-table-action target-delete-action" type="submit" title="Удалить объект" aria-label="Удалить объект {{ target.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"></path></svg></button>
+            </form>
+          </div>
+          </div>
+        </td>
+        {% endif %}
+      </tr>
+      {% if current_user.role == 'admin' %}
+      <tr class="edit-row" data-target-edit-row>
+        <td colspan="9">
+          <details id="target-{{ target.id }}-editor" class="table-editor navigation-editor" {% if focus_target_id == target.id %}open{% endif %}><summary class="target-editor-summary">Редактор объекта {{ target.name }}</summary>
+            <form method="post" action="/targets/{{ target.id }}/update" class="form-grid compact-form target-form target-edit-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="return_to" value="{{ editor_save_return_to if focus_target_id == target.id else (request.url.path ~ ('?' ~ request.url.query if request.url.query else '')) }}">
+              <label>Площадка<select name="site_id">{% for option in sites %}<option value="{{ option.id }}" {{ 'selected' if option.id == target.site_id else '' }}>{{ option.name }}</option>{% endfor %}</select></label>
+              <label>Название<input name="name" value="{{ target.name }}" required maxlength="160"></label>
+              <label>Тип<select name="kind">{% for kind in kinds %}<option value="{{ kind.value }}" {{ 'selected' if kind.value == target.kind else '' }}>{{ kind.value }}</option>{% endfor %}</select></label>
+              <label>Проверка<select name="checker_type" data-checker-select>{% for checker in checker_names %}<option value="{{ checker }}" {{ 'selected' if checker == target.checker_type else '' }}>{{ checker }}</option>{% endfor %}</select></label>
+              <label>IP, DNS или RTSP-путь<input name="address" value="{{ target.address }}" required maxlength="255"></label>
+              <label class="port-field" data-port-field {{ 'hidden' if target.checker_type == 'icmp' else '' }}>Порт<input type="number" name="port" value="{{ '' if target.checker_type == 'icmp' else target.port }}" min="1" max="65535" {{ 'disabled' if target.checker_type == 'icmp' else 'required' }} data-port-input></label>
+              <label>Интервал<input type="number" name="interval_seconds" value="{{ target.interval_seconds }}" min="60" max="86400" required></label>
+              <label class="target-site-entry-option"><input type="checkbox" name="is_site_entry" value="true" {{ 'checked' if target.is_site_entry else '' }}><span>Точка входа площадки</span><button class="help-trigger" type="button" aria-label="Описание точки входа площадки" data-help-wide data-help="Точка входа — основной сетевой узел площадки: обычно роутер, VPN-шлюз или сервер, через который доступна остальная инфраструктура. Выбрать можно только объект типа «Сеть» или «Сервер»; для одной площадки разрешена одна точка входа.&#10;&#10;Когда её основная проверка недоступна, Monitoring Maxval временно не выполняет проверки остальных объектов этой площадки. Новые результаты и инциденты дочерних объектов не создаются, а уже имеющаяся история и открытые инциденты сохраняются. В интерфейсе такие объекты получают нейтральное состояние «Нет связи с площадкой».&#10;&#10;После успешной проверки точки входа обычный polling объектов площадки продолжается в том же цикле.">?</button></label>
+              <label class="form-field-full">Комментарий<textarea name="comment" rows="3" maxlength="1000">{{ target.comment or '' }}</textarea></label>
+              <div class="target-form-footer">
+                <div class="target-form-options" aria-label="Дополнительные параметры объекта">
+                  <label class="checkbox-label"><input type="checkbox" name="notifications_suppressed" value="true" {{ 'checked' if target.notifications_suppressed else '' }}> Исключить из уведомлений</label>
+                  <label class="checkbox-label"><input type="checkbox" name="favorite" value="true" {{ 'checked' if target.favorite else '' }}> Избранный объект</label>
+                </div>
+                <div class="form-actions"><button class="button target-form-submit" type="submit">Сохранить</button></div>
+              </div>
+            </form>
+            {% set services = target_checks_by_target.get(target.id, []) %}
+            {% set secondary_services = services | rejectattr('is_primary') | list %}
+            <section class="target-services-editor" aria-labelledby="target-{{ target.id }}-services-heading">
+              <div class="target-services-editor-heading">
+                <div><div class="service-editor-title-row"><h3 id="target-{{ target.id }}-services-heading">Сервисы</h3><button class="help-trigger" type="button" aria-label="Справка по сервисам объекта" data-help-wide data-help="Сервисы — дополнительные проверки одного объекта: TCP, HTTP, HTTPS, ICMP или RTSP. Они выполняются только после успешной основной проверки объекта.&#10;&#10;Сервис имеет собственный статус и историю. Его ошибка не переводит объект в Offline и не меняет основную доступность, но может создать отдельный инцидент.&#10;&#10;Отключение сервиса сохраняет его настройки и историю; при повторном включении опрос продолжается.">?</button></div><p class="muted">Дополнительные проверки объекта. Они не меняют состояние основной доступности.</p></div>
+                <button class="icon-action service-add-action" type="button" data-table-editor-toggle="target-{{ target.id }}-service-create" aria-controls="target-{{ target.id }}-service-create" aria-expanded="false" aria-label="Добавить сервис для объекта {{ target.name }}" title="Добавить сервис">+</button>
+              </div>
+              <details id="target-{{ target.id }}-service-create" class="table-editor navigation-editor service-create-editor" {% if add_service_target_id == target.id %}open{% endif %}><summary>Добавить сервис</summary><div class="service-editor-body">{{ service_form(target, '/targets/' ~ target.id ~ '/checks') }}</div></details>
+              <div class="table-wrap service-table-wrap target-services-table-wrap">
+                <table class="entity-table responsive-table service-table target-services-table">
+                  <thead><tr><th class="service-status-column">Статус</th><th>Сервис</th><th>Проверка</th><th>Адрес</th><th>Timeout</th><th>Повторы</th><th class="actions-column">Действия</th></tr></thead>
+                  <tbody>
+                  {% for check in secondary_services %}
+                    <tr class="{{ 'service-disabled' if not check.enabled else '' }}">
+                      <td class="service-status-cell" data-label="Статус"><span class="status-dot {{ 'status-up' if check.enabled else 'status-down' }}" role="img" aria-label="Сервис {{ check.name }} {{ 'включён' if check.enabled else 'отключён' }}" title="{{ 'Включён' if check.enabled else 'Отключён' }}"></span></td>
+                      <td data-label="Сервис"><div class="service-name"><strong>{{ check.name }}</strong></div></td>
+                      <td data-label="Проверка"><code>{{ 'Каталог' if check.checker_type == 'directory' else check.checker_type }}{% if check.checker_type == 'dns' %} {{ check.dns_record_type or 'A' }}{% endif %}</code>{% if check.checker_type not in ['icmp', 'dns', 'directory'] and check.port is not none %} · {{ check.port }}{% endif %}{% if check.checker_type == 'directory' %}<small class="muted service-path">{{ check.directory_pattern or '*' }} · {{ check.directory_period_hours or 24 }} ч</small>{% elif check.checker_type in ['http', 'https'] and check.path != '/' %}<small class="muted service-path">{{ check.path }}</small>{% endif %}</td>
+                      <td data-label="Адрес"><span class="service-address">{{ check.directory_path if check.checker_type == 'directory' else (check.dns_name if check.checker_type == 'dns' else (check.address_override or target.address)) }}</span>{% if check.checker_type == 'directory' and check.directory_scanned_at %}<small class="muted">За период: {{ check.directory_recent_count or 0 }} файлов</small>{% elif check.address_override and check.checker_type != 'dns' %}<small class="muted">свой адрес</small>{% endif %}</td>
+                      <td data-label="Timeout">{{ check.timeout_seconds if check.timeout_seconds is not none else default_check_timeout }} с</td>
+                      <td data-label="Повторы">{{ check.retries }}</td>
+                      <td class="service-actions-cell" data-label="Действия"><div class="service-row-actions"><button class="icon-action" type="button" data-table-editor-toggle="target-{{ target.id }}-service-{{ check.id }}-editor" aria-controls="target-{{ target.id }}-service-{{ check.id }}-editor" aria-expanded="false" title="Изменить сервис" aria-label="Изменить сервис {{ check.name }}">✎</button><form method="post" action="/targets/{{ target.id }}/checks/{{ check.id }}/toggle"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="/targets?focus_target_id={{ target.id }}"><button class="icon-action" type="submit" title="{{ 'Отключить сервис' if check.enabled else 'Включить сервис' }}" aria-label="{{ 'Отключить сервис ' ~ check.name if check.enabled else 'Включить сервис ' ~ check.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9"></path><path d="M7.1 5.8a8 8 0 1 0 9.8 0"></path></svg></button></form><form method="post" action="/targets/{{ target.id }}/checks/{{ check.id }}/delete" data-confirm="Удалить сервис «{{ check.name }}» и его историю? Исторические инциденты сохранятся."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="/targets?focus_target_id={{ target.id }}"><button class="icon-action service-delete-action" type="submit" title="Удалить сервис" aria-label="Удалить сервис {{ check.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"></path></svg></button></form></div></td>
+                    </tr>
+                    <tr class="edit-row service-edit-row"><td colspan="7"><details id="target-{{ target.id }}-service-{{ check.id }}-editor" class="table-editor"><summary>Редактор сервиса {{ check.name }}</summary><div class="service-editor-body">{{ service_form(target, '/targets/' ~ target.id ~ '/checks/' ~ check.id ~ '/update', check) }}</div></details></td></tr>
+                  {% else %}
+                    <tr><td colspan="7" class="empty-state">Дополнительные сервисы ещё не добавлены.</td></tr>
+                  {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </details>
+        </td>
+      </tr>
+      {% endif %}
+      {% else %}<tr><td colspan="{{ 9 if current_user.role == 'admin' else 8 }}">Объекты пока не добавлены.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{{ pagination(request, pager) }}
+{% endblock %}

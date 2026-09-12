@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_chart.html" import standard_chart %}
+{% from "_pagination.html" import pagination %}
+{% block title %}{{ target.name }} · ИБП{% endblock %}
+{% block content %}
+<div class="snmp-page snmp-ups-page">
+  <section class="page-heading snmp-heading">
+    <div class="snmp-heading-copy">
+      <p class="eyebrow">UPS-MIB · RFC 1628</p>
+      <div class="snmp-title-row"><span class="snmp-title-icon" aria-hidden="true">▣</span><h1>ИБП · {{ target.name }}</h1></div>
+      <p class="muted snmp-heading-description">Специализированные данные ИБП не меняют доступность объекта. Логические состояния создают обычные SNMP-инциденты.</p>
+    </div>
+    <div class="page-heading-actions snmp-heading-actions">
+      <div class="snmp-header-icon-actions">
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp" title="SNMP" aria-label="SNMP"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1"></rect><rect x="4" y="14" width="16" height="6" rx="1"></rect><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/interfaces" title="Интерфейсы" aria-label="Интерфейсы"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="6" height="6" rx="1"></rect><rect x="15" y="14" width="6" height="6" rx="1"></rect><path d="M9 7h3a3 3 0 0 1 3 3v4M9 17h3a3 3 0 0 0 3-3"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/supplies" title="Расходники" aria-label="Расходники"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V4h10v4M7 17h10v3H7z"></path><rect x="4" y="8" width="16" height="9" rx="2"></rect><path d="M8 12h.01"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/thresholds" title="Пороги" aria-label="Пороги"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M11 16v4"></path></svg></a>
+        {% if current_user.role == 'admin' %}<a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/discovery" title="OID Discovery" aria-label="OID Discovery"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="5"></circle><path d="m14 14 6 6M8 10h4M10 8v4"></path></svg></a>{% endif %}
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/history" title="История доступности" aria-label="История доступности"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel snmp-ups-panel">
+    <div class="panel-heading snmp-ups-heading"><div><h2>ИБП</h2><p class="muted">Данные обновляются автоматически обычным SNMP polling.</p></div>{% if current_user.role == 'admin' %}<form method="post" action="/targets/{{ target.id }}/snmp/ups/poll"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="icon-action snmp-ups-poll-button" type="submit" title="Обновить данные ИБП" aria-label="Обновить данные ИБП" {{ 'disabled' if not config or not config.enabled or not config.ups_enabled else '' }}>↻</button></form>{% endif %}</div>
+    {% if not config or not config.enabled %}<div class="alert alert-warning">Сначала включите SNMP.</div>{% elif not config.ups_enabled %}<div class="alert alert-warning">Мониторинг ИБП выключен. Включите его в настройках SNMP.</div>{% elif not state %}<div class="alert alert-warning">UPS-MIB ещё не ответил. Неподдерживаемые OID не считаются ошибкой SNMP.</div>{% else %}
+    <dl class="target-current-settings-grid snmp-device-grid"><div><dt>Производитель</dt><dd>{{ state.manufacturer or '—' }}</dd></div><div><dt>Модель</dt><dd>{{ state.model or '—' }}</dd></div><div><dt>Питание</dt><dd>{{ output_source_label(state.output_source, state.profile) }}</dd></div><div><dt>Батарея</dt><dd>{{ battery_status_label(state.battery_status, state.profile) }}</dd></div><div><dt>Заряд</dt><dd>{{ state.battery_charge_percent if state.battery_charge_percent is not none else '—' }}{% if state.battery_charge_percent is not none %} %{% endif %}</dd></div><div><dt>Автономность</dt><dd>{{ state.estimated_runtime_minutes if state.estimated_runtime_minutes is not none else '—' }}{% if state.estimated_runtime_minutes is not none %} мин{% endif %}</dd></div><div><dt>Напряжение батареи</dt><dd>{{ state.battery_voltage if state.battery_voltage is not none else '—' }}{% if state.battery_voltage is not none %} В{% endif %}</dd></div><div><dt>Температура</dt><dd>{{ state.battery_temperature if state.battery_temperature is not none else '—' }}{% if state.battery_temperature is not none %} °C{% endif %}</dd></div>{% if state.battery_replace_needed is not none %}<div><dt>Замена батареи</dt><dd>{{ 'Требуется' if state.battery_replace_needed else 'Не требуется' }}</dd></div>{% endif %}{% if state.last_transfer_reason %}<div><dt>Последний переход</dt><dd>{{ state.last_transfer_reason }}</dd></div>{% endif %}{% if state.last_self_test_result %}<div><dt>Последний самотест</dt><dd>{{ state.last_self_test_result }}{% if state.last_self_test_at %} · {{ state.last_self_test_at }}{% endif %}</dd></div>{% endif %}<div><dt>Обновлено</dt><dd>{{ display_datetime(state.last_polled_at) if state.last_polled_at else '—' }}</dd></div></dl>{% endif %}
+  </section>
+
+  {% if state and lines %}<section class="panel table-wrap snmp-ups-lines-panel"><div class="panel-heading"><h2>Вход / выход</h2></div><table class="entity-table responsive-table"><thead><tr><th>Направление</th><th>Фаза</th><th>Напряжение</th><th>Частота</th><th>Ток</th><th>Мощность</th><th>Нагрузка</th></tr></thead><tbody>{% for line in lines %}<tr><td data-label="Направление">{{ 'Вход' if line.direction == 'input' else 'Выход' }}</td><td data-label="Фаза">L{{ line.line_index }}</td><td data-label="Напряжение">{{ line.voltage if line.voltage is not none else '—' }}</td><td data-label="Частота">{{ line.frequency if line.frequency is not none else '—' }}</td><td data-label="Ток">{{ line.current if line.current is not none else '—' }}</td><td data-label="Мощность">{{ line.power if line.power is not none else '—' }}</td><td data-label="Нагрузка">{{ line.load_percent if line.load_percent is not none else '—' }}{% if line.load_percent is not none %} %{% endif %}</td></tr>{% endfor %}</tbody></table></section>{% endif %}
+
+  <section id="ups-history" class="panel snmp-ups-history-panel">
+    <div class="panel-heading"><h2>История значений</h2><p class="muted">Числовые данные UPS-MIB; применяется общий срок хранения SNMP.</p></div>
+    <div class="filter-panel-heading snmp-ups-filter-heading"><h3>Фильтр</h3></div>
+    <div class="filter-chips">{% for value, label in ((24, '24 часа'), (168, '7 дней'), (720, '30 дней')) %}<a class="filter-chip {{ 'active' if hours == value else '' }}" href="?hours={{ value }}&per_page={{ pager.per_page }}#ups-history">{{ label }}</a>{% endfor %}</div>
+    {% if charts %}<div class="snmp-history-graphs ups-history-graphs">{% for chart in charts %}<article class="snmp-history-graph"><div class="snmp-history-graph-heading"><div><h3>{{ chart.title }}</h3><p class="muted">{{ chart.subtitle }}</p></div><span>{{ chart.unit }}</span></div>{{ standard_chart(chart.chart, chart.tooltip_series, chart.title, chart.unit, 'snmp-history-chart') }}{% if chart.series|length > 1 %}<div class="snmp-history-legend">{% for series in chart.series %}<span class="{{ series.css_class }}"><i></i>{{ series.label }}: {{ series.last_value }} {{ chart.unit }}</span>{% endfor %}</div>{% endif %}</article>{% endfor %}</div>{% else %}<div class="empty-state">Графики появятся после первого UPS polling.</div>{% endif %}
+    <div class="table-wrap"><table class="entity-table responsive-table"><thead><tr><th>Время</th><th>Показатель</th><th>Значение</th></tr></thead><tbody>{% for sample in samples %}<tr><td data-label="Время">{{ display_datetime(sample.collected_at) }}</td><td data-label="Показатель">{{ sample.metric_key }}</td><td data-label="Значение">{{ sample.value }}</td></tr>{% else %}<tr><td colspan="3" class="empty-state">История ИБП пока отсутствует.</td></tr>{% endfor %}</tbody></table></div>
+  </section>
+  {{ pagination(request, pager) }}
+</div>
+{% endblock %}

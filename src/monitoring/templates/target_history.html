@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% from "_sortable_header.html" import sortable_header %}
+{% from "_chart.html" import standard_chart %}
+{% from "_section_icon.html" import section_icon %}
+{% from "_target_health.html" import services_panel %}
+{% block title %}{{ history.target.name }} · История{% endblock %}
+{% block content %}
+<section class="page-heading history-heading">
+  <div class="page-heading-main"><p class="eyebrow">История объекта</p><div class="page-title-row">{{ section_icon('history') }}<h1>{{ history.target.name }}</h1></div><p class="muted">{{ history.site.name }} · {{ history.target.address }}{% if history.target.checker_type != 'icmp' %}:{{ history.target.port }}{% endif %} · График: {{ history.site.schedule.name if history.site.schedule else 'Круглосуточно' }}</p></div>
+  {% if current_user.role == 'admin' %}
+  <div class="history-heading-actions history-inline-actions" aria-label="Действия с объектом">
+    <a class="icon-action" href="/targets/{{ history.target.id }}/snmp" title="SNMP-метрики" aria-label="Открыть SNMP-метрики объекта {{ history.target.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1"></rect><rect x="4" y="14" width="16" height="6" rx="1"></rect><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"></path></svg></a>
+    <a class="icon-action" href="/targets?focus_target_id={{ history.target.id }}&return_to={{ request.url.path }}?hours={{ selected_hours }}%26per_page={{ pager.per_page }}" title="Изменить объект" aria-label="Изменить объект {{ history.target.name }}">✎</a>
+    <form method="post" action="/checks/targets/{{ history.target.id }}/run-now">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="return_to" value="{{ request.url.path }}?hours={{ selected_hours }}&per_page={{ pager.per_page }}">
+      <button class="icon-action" type="submit" title="Проверить доступность сейчас" aria-label="Проверить доступность объекта {{ history.target.name }} сейчас">↻</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel target-current-settings">
+  <div class="panel-heading">
+    <h2>Текущие настройки объекта</h2>
+    <div class="target-current-settings-meta">
+      <span class="badge history-live-status {{ 'badge-success' if history.is_online else 'badge-danger' }}">{{ 'Онлайн' if history.is_online else 'Оффлайн' }}</span>
+      <small class="entity-id">ID: {{ history.target.id }}</small>
+    </div>
+  </div>
+  <dl class="target-current-settings-grid">
+    <div><dt>Площадка</dt><dd>{{ history.site.name }}</dd></div>
+    <div><dt>Тип объекта</dt><dd>{{ kind_labels.get(history.target.kind, history.target.kind) }}</dd></div>
+    <div><dt>Проверка</dt><dd><code>{{ history.target.checker_type }}</code></dd></div>
+    <div><dt>{{ 'RTSP адрес / путь' if history.target.checker_type == 'rtsp' else 'URL / адрес' if history.target.checker_type in ['http','https'] else 'Адрес / host' }}</dt><dd>{{ history.target.address }}</dd></div>
+    <div><dt>Порт</dt><dd>{{ history.target.port if history.target.checker_type != 'icmp' else '—' }}</dd></div>
+    <div><dt>Интервал проверки</dt><dd>{{ history.target.interval_seconds }} с</dd></div>
+    <div><dt>График площадки</dt><dd>{{ history.site.schedule.name if history.site.schedule else 'Круглосуточно' }}</dd></div>
+    <div><dt>Уведомления</dt><dd>{{ 'Без уведомлений' if history.target.notifications_suppressed else 'Включены' }}</dd></div>
+    <div><dt>Точка входа площадки</dt><dd>{{ 'Да' if history.target.is_site_entry else '—' }}</dd></div>
+    <div><dt>Состояние</dt><dd><span class="badge {{ 'badge-success' if history.target.enabled else 'badge-danger' }}">{{ 'Включён' if history.target.enabled else 'Отключён' }}</span></dd></div>
+    <div><dt>SNMP</dt><dd>
+      {% if snmp_config and snmp_config.enabled %}
+        <span class="badge {{ 'badge-success' if snmp_config.last_status == 'ok' else 'badge-danger' if snmp_config.last_status == 'error' else 'badge-warning' }}">{{ {'ok': 'OK', 'error': 'Ошибка', 'never': 'Не опрашивался'}.get(snmp_config.last_status, snmp_config.last_status) }}</span>
+        {% if not history.is_online %}<small class="muted">Опрос приостановлен: объект офлайн</small>{% endif %}
+      {% else %}
+        <span class="badge badge-danger">Выключен</span>
+      {% endif %}
+    </dd></div>
+    <div><dt>Здоровье</dt><dd class="health-badge-stack">{% if target_health %}<span class="badge {{ 'badge-success' if target_health.state == 'ok' else 'badge-warning' if target_health.state == 'warning' else 'badge-danger' if target_health.state in ['critical', 'offline'] else '' }}">{{ target_health.label }}</span>{% if target_health.unstable %}<span class="badge badge-warning unstable-link-badge">Нестабильная связь</span>{% endif %}{% if target_health.reason_kind == 'site_entry' %}<small class="muted">{{ target_health.reason }}</small>{% endif %}{% else %}<span class="badge">Нет данных</span>{% endif %}</dd></div>
+    <div><dt>Избранное</dt><dd>{{ 'Да' if history.target.favorite else 'Нет' }}</dd></div>
+    <div class="target-current-settings-comment"><dt>Комментарий</dt><dd>{{ history.target.comment or '—' }}</dd></div>
+  </dl>
+</section>
+
+{% if supplies %}
+<section class="panel target-telemetry-summary">
+  <div class="panel-heading">
+    <div><h2>Расходники</h2><p class="muted">Последние значения Printer-MIB.</p></div>
+    <a class="icon-action" href="/targets/{{ history.target.id }}/snmp/supplies" title="Открыть расходники" aria-label="Открыть расходники объекта">▣</a>
+  </div>
+  <dl class="target-current-settings-grid target-telemetry-grid">
+    {% for supply in supplies %}<div><dt>{{ supply.display_name }}</dt><dd>{% if supply.last_error %}<span class="badge badge-danger">Ошибка</span>{% else %}{{ supply_level_label(level=supply.level, percent_remaining=supply.percent_remaining, level_state=supply.level_state) }}{% endif %}</dd></div>{% endfor %}
+  </dl>
+</section>
+{% endif %}
+
+{% if snmp_config and snmp_config.ups_enabled %}
+<section class="panel target-telemetry-summary">
+  <div class="panel-heading">
+    <div><h2>ИБП</h2><p class="muted">Последние данные UPS-MIB.</p></div>
+    <a class="icon-action" href="/targets/{{ history.target.id }}/snmp/ups" title="Открыть мониторинг ИБП" aria-label="Открыть мониторинг ИБП объекта">▣</a>
+  </div>
+  {% if ups_state %}
+  <dl class="target-current-settings-grid target-telemetry-grid">
+    <div><dt>Устройство</dt><dd>{{ ups_state.manufacturer or '—' }}{% if ups_state.model %} · {{ ups_state.model }}{% endif %}</dd></div>
+    <div><dt>Питание</dt><dd>{{ output_source_label(ups_state.output_source, ups_state.profile) }}</dd></div>
+    <div><dt>Батарея</dt><dd>{{ battery_status_label(ups_state.battery_status, ups_state.profile) }}</dd></div>
+    <div><dt>Заряд</dt><dd>{{ ups_state.battery_charge_percent if ups_state.battery_charge_percent is not none else '—' }}{% if ups_state.battery_charge_percent is not none %} %{% endif %}</dd></div>
+    <div><dt>Автономность</dt><dd>{{ ups_state.estimated_runtime_minutes if ups_state.estimated_runtime_minutes is not none else '—' }}{% if ups_state.estimated_runtime_minutes is not none %} мин{% endif %}</dd></div>
+    <div><dt>Обновлено</dt><dd>{{ display_datetime(ups_state.last_polled_at) if ups_state.last_polled_at else '—' }}</dd></div>
+  </dl>
+  {% else %}<div class="empty-state target-telemetry-empty">UPS-MIB ещё не вернул данных.</div>{% endif %}
+</section>
+{% endif %}
+
+{% if target_health %}{{ services_panel(target_health, history.target, display_datetime, format_bytes, include_primary=False) }}{% endif %}
+
+<form method="get" class="panel quick-filters history-periods" aria-label="Период истории">
+  <div class="filter-panel-heading"><h2>Фильтр</h2></div>
+  {% for value, label in ((24, '24 часа'), (168, '7 дней'), (720, '30 дней'), (2160, '90 дней')) %}<a class="filter-chip {{ 'active' if selected_hours == value else '' }}" href="?hours={{ value }}&per_page={{ pager.per_page }}{% if snmp_graph_selection %}&snmp_graph={{ snmp_graph_selection }}{% endif %}">{{ label }}</a>{% endfor %}
+</form>
+
+<section class="summary" aria-label="Сводка истории"><article><span>Проверок</span><strong>{{ history.checked_count }}</strong></article><article class="summary-up"><span>Успешных</span><strong>{{ history.up_count }}</strong></article><article class="summary-down"><span>Ошибок</span><strong>{{ history.down_count }}</strong></article><article class="summary-unknown"><span>Нет данных</span><strong>{{ history.unknown_count }}</strong></article><article><span>Доступность</span><strong>{{ ('%.2f%%'|format(history.availability)) if history.availability is not none else '—' }}</strong></article></section>
+
+<section class="panel chart-panel"><div class="panel-heading"><h2>Задержка ответа</h2><p class="muted">До {{ history.result_limit }} последних результатов выбранного периода. Нерабочие часы площадки не опрашиваются и не снижают доступность.</p></div>{% if history.checked_count %}{{ standard_chart(history.latency_chart, ({'label': 'Задержка', 'values': history.latency_chart.values, 'points': history.latency_chart.points},), 'График задержки', 'мс') }}{% else %}<div class="empty-state"><p>Проверки за этот период отсутствуют.</p></div>{% endif %}</section>
+
+{% if snmp_graph_choices %}
+<section class="panel chart-panel snmp-history-panel">
+  <div class="panel-heading">
+    <div><h2>SNMP-графики</h2><p class="muted">Выберите один источник данных за текущий период истории.</p></div>
+    <div class="snmp-history-actions">
+      <form method="get" class="snmp-history-selector" data-snmp-history-selector aria-label="Источник SNMP-графика">
+        <input type="hidden" name="hours" value="{{ selected_hours }}">
+        <input type="hidden" name="per_page" value="{{ pager.per_page }}">
+        <select name="snmp_graph" data-auto-submit>
+          {% for choice in snmp_graph_choices %}<option value="{{ choice.value }}" {{ 'selected' if choice.value == snmp_graph_selection else '' }}>{{ choice.label }}</option>{% endfor %}
+        </select>
+        <button hidden type="submit">Показать</button>
+      </form>
+    </div>
+  </div>
+  {% if snmp_graph %}
+    <h3 class="snmp-history-title">{{ snmp_graph.title }}</h3>
+    <div class="snmp-history-graphs">
+      {% for panel in snmp_graph.panels %}
+      <article class="snmp-history-graph">
+        <div class="snmp-history-graph-heading"><div><h3>{{ panel.title }}</h3><p class="muted">{{ panel.subtitle }}</p></div><span>{{ panel.unit }}</span></div>
+        {{ standard_chart(panel.chart, panel.tooltip_series, panel.title, panel.unit, 'snmp-history-chart') }}
+        <div class="snmp-history-legend">{% for series in panel.series %}<span class="{{ series.css_class }}"><i></i>{{ series.label }}: {{ series.last_value }} {{ panel.unit }}</span>{% endfor %}</div>
+      </article>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="panel table-wrap report-section"><div class="panel-heading"><h2>Последние результаты</h2><p class="muted">Статистика выше рассчитана по всем {{ history.checked_count }} результатам в пределах установленного лимита.</p></div><table class="entity-table responsive-table history-table"><thead><tr>{{ sortable_header(request, 'Время', 'checked_at', sort_state.column, sort_state.direction) }}{{ sortable_header(request, 'Статус', 'status', sort_state.column, sort_state.direction) }}{{ sortable_header(request, 'Задержка', 'latency', sort_state.column, sort_state.direction) }}{{ sortable_header(request, 'Сообщение', 'message', sort_state.column, sort_state.direction) }}</tr></thead><tbody>{% for result in history_results %}<tr><td data-label="Время">{{ display_datetime(result.checked_at) }}</td><td data-label="Статус"><span class="badge {{ 'badge-success' if result.status == 'up' else 'badge-danger' if result.status == 'down' else 'badge-warning' }}">{{ result.status }}</span></td><td data-label="Задержка">{{ (result.latency_ms|string + ' мс') if result.latency_ms is not none else '—' }}</td><td data-label="Сообщение">{{ result.message or '—' }}</td></tr>{% else %}<tr><td colspan="4" class="empty-state">Результатов нет.</td></tr>{% endfor %}</tbody></table></section>
+{{ pagination(request, pager) }}
+{% endblock %}

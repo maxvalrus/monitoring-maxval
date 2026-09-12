@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% from "_chart.html" import standard_chart %}
+{% from "_section_icon.html" import section_icon %}
+{% from "_target_kind_icon.html" import target_kind_icon %}
+{% from "_target_health.html" import health_summary %}
+{% block title %}Состояние · Мониторинг Maxval{% endblock %}
+{% block content %}
+<section class="page-heading state-heading">
+  <div class="page-heading-main">
+    <p class="eyebrow">Обзор инфраструктуры</p>
+    <div class="page-title-row">{{ section_icon('state') }}<h1>Текущее состояние</h1></div>
+    <p class="muted">Последний известный результат для каждого активного объекта.</p>
+  </div>
+  <div class="state-actions">
+    <a class="button button-secondary" href="/wallboard" title="Открыть экран мониторинга для телевизора">TV-экран</a>
+    <label class="auto-refresh-control" title="Обновлять только страницу с показанными результатами каждые 60 секунд"><input type="checkbox" data-state-auto-refresh> Автообновление страницы</label>
+    {% if current_user.role == 'admin' %}
+    <form method="post" action="/checks/run-now" class="manual-check-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+      <button class="button button-primary" type="submit" title="Запустить внеочередную сетевую проверку всех активных объектов, которые сейчас находятся в рабочем времени">Опросить объекты</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel portal-panel" aria-labelledby="portal-status-title">
+  <div class="panel-heading portal-heading">
+    <div class="portal-heading-main">
+      <div class="portal-title-row">
+        <h2 id="portal-status-title">Сервер портала</h2>
+        <span class="portal-health-badge portal-health-{{ portal.health.level }}">{{ portal.health.label }}</span>
+      </div>
+      <p class="muted">Нагрузка сервера и состояние очереди проверок</p>
+    </div>
+    <time class="portal-updated">{{ display_datetime(portal.collected_at) }}</time>
+  </div>
+
+  {% if portal.scheduler %}
+  <div class="scheduler-glance" aria-label="Состояние очереди проверок">
+    <div class="scheduler-glance-item">
+      <span>В очереди</span>
+      <strong class="{{ 'text-warning' if portal.scheduler.queue_count else '' }}">{{ portal.scheduler.queue_count }}</strong>
+    </div>
+    <div class="scheduler-glance-item">
+      <span>Просрочено</span>
+      <strong class="{{ 'text-down' if portal.scheduler.missed_interval_count else ('text-warning' if portal.scheduler.delayed_count else '') }}">{{ portal.scheduler.delayed_count }}</strong>
+      {% if portal.scheduler.missed_interval_count %}<small>{{ portal.scheduler.missed_interval_count }} пропустили интервал</small>{% endif %}
+    </div>
+    <div class="scheduler-glance-item">
+      <span>Макс. ожидание</span>
+      <strong class="{{ 'text-down' if portal.scheduler.missed_interval_count else ('text-warning' if portal.scheduler.oldest_lag_seconds >= 60 else '') }}">{{ format_short_duration(portal.scheduler.oldest_lag_seconds) }}</strong>
+    </div>
+    <div class="scheduler-glance-item">
+      <div class="scheduler-glance-label"><span>Запас scheduler</span><button class="help-trigger" type="button" aria-label="Справка о запасе scheduler" data-help="Запас scheduler показывает, какая доля времени между плановыми пачками проверок остаётся свободной после выполнения последней пачки.&#10;&#10;Высокое значение означает, что проверки завершаются с запасом. Жёлтый цвет — запас меньше 30%; красный — последняя пачка заняла весь доступный интервал или больше.&#10;&#10;Во время ручного опроса вместо обычной оценки показывается его выполнение.">?</button></div>
+      {% if portal.scheduler.headroom_percent is not none %}
+      <strong class="{{ 'text-down' if portal.scheduler.headroom_percent <= 0 else ('text-warning' if portal.scheduler.headroom_percent < 30 else 'text-up') }}">{{ '%.0f'|format(portal.scheduler.headroom_percent) }}%</strong>
+      {% else %}
+      <strong>—</strong>
+      {% endif %}
+      <small>{{ 'ручной опрос' if portal.scheduler.manual_running else ('работает' if portal.scheduler.running else 'остановлен') }}</small>
+    </div>
+  </div>
+  {% endif %}
+  <div class="portal-metrics">
+    <article class="metric-card">
+      <span>CPU</span>
+      <strong class="metric-value {{ 'text-warning' if portal.current.cpu_percent >= 95 else '' }}">{{ '%.1f'|format(portal.current.cpu_percent) }}%</strong>
+      <small class="metric-detail">Аптайм {{ format_duration(portal.current.uptime_seconds) }}</small>
+      {{ standard_chart(portal.cpu_chart, ({'label': 'CPU', 'values': portal.cpu_chart.values, 'points': portal.cpu_chart.points},), 'График загрузки CPU', '%', 'sparkline') }}
+    </article>
+    <article class="metric-card">
+      <span>Память</span>
+      <strong class="metric-value {{ 'text-down' if portal.current.memory_percent >= 97 else ('text-warning' if portal.current.memory_percent >= 90 else '') }}">{{ '%.1f'|format(portal.current.memory_percent) }}%</strong>
+      <small class="metric-detail">{{ format_bytes(portal.memory_used_bytes) }} / {{ format_bytes(portal.memory_total_bytes) }}</small>
+      {{ standard_chart(portal.memory_chart, ({'label': 'Память', 'values': portal.memory_chart.values, 'points': portal.memory_chart.points},), 'График использования памяти', '%', 'sparkline') }}
+    </article>
+    <article class="metric-card">
+      <span>Диск</span>
+      <strong class="metric-value {{ 'text-down' if portal.current.disk_percent >= 90 else ('text-warning' if portal.current.disk_percent >= 80 else '') }}">{{ '%.1f'|format(portal.current.disk_percent) }}%</strong>
+      <small class="metric-detail">{{ format_bytes(portal.disk_used_bytes) }} / {{ format_bytes(portal.disk_total_bytes) }}</small>
+      {{ standard_chart(portal.disk_chart, ({'label': 'Диск', 'values': portal.disk_chart.values, 'points': portal.disk_chart.points},), 'График использования диска', '%', 'sparkline') }}
+    </article>
+    <article class="metric-card metric-network">
+      <span>Сеть</span>
+      <strong class="metric-value metric-network-value">↓ {{ format_bytes(portal.receive_rate) }}/с · ↑ {{ format_bytes(portal.send_rate) }}/с</strong>
+      <small class="metric-detail">Пакеты: ↓ {{ '%.1f'|format(portal.packet_receive_rate) }}/с · ↑ {{ '%.1f'|format(portal.packet_send_rate) }}/с</small>
+      {{ standard_chart(portal.network_chart, ({'label': 'Сеть', 'values': portal.network_chart.values, 'points': portal.network_chart.points},), 'График сетевой нагрузки', 'Б/с', 'sparkline') }}
+    </article>
+  </div>
+
+  <details class="portal-details">
+    <summary>Подробности системы</summary>
+    <div class="portal-details-grid">
+      <section class="portal-detail-group">
+        <div class="portal-detail-heading"><h3>Проверки</h3><button class="help-trigger" type="button" aria-label="Справка по проверкам scheduler" data-help-wide data-help="Показатели рассчитываются в памяти встроенного scheduler за последние 5 минут и не создают отдельные записи в базе.&#10;&#10;За 5 минут — число завершённых проверок, включая основной check, сохранение результата, SNMP polling и обработку уведомлений. UNKNOWN — проверки без определённого успешного или неуспешного результата.&#10;&#10;Среднее время и P95 показывают типичную и близкую к максимальной длительность полного задания. Последняя пачка — число объектов в последнем плановом обходе и его общая длительность.&#10;&#10;Параллелизм — максимальное число одновременных сетевых проверок. Шаг scheduler — период поиска объектов, которым пора выполнить основную проверку.">?</button></div>
+        {% if portal.scheduler %}
+        <dl class="portal-stat-list">
+          <div><dt>За 5 минут</dt><dd>{{ portal.scheduler.checks_5m }}</dd></div>
+          <div><dt>UNKNOWN за 5 минут</dt><dd class="{{ 'text-warning' if portal.scheduler.unknown_5m else '' }}">{{ portal.scheduler.unknown_5m }}</dd></div>
+          <div><dt>Ошибки scheduler</dt><dd class="{{ 'text-down' if portal.scheduler.scheduler_errors_5m else '' }}">{{ portal.scheduler.scheduler_errors_5m }}</dd></div>
+          <div><dt>Среднее время</dt><dd>{{ format_short_duration(portal.scheduler.average_check_seconds) }}</dd></div>
+          <div><dt>P95</dt><dd>{{ format_short_duration(portal.scheduler.p95_check_seconds) }}</dd></div>
+          <div><dt>Последняя пачка</dt><dd>{{ portal.scheduler.last_batch_size }}{% if portal.scheduler.last_batch_duration_seconds is not none %} · {{ format_short_duration(portal.scheduler.last_batch_duration_seconds) }}{% endif %}</dd></div>
+          <div><dt>Параллелизм</dt><dd>{{ portal.scheduler.parallel_limit }}</dd></div>
+          <div><dt>Шаг scheduler</dt><dd>{{ portal.scheduler.poll_seconds }} с</dd></div>
+        </dl>
+        {% if portal.scheduler.scheduler_error_events %}
+        <div class="portal-error-list portal-scheduler-errors">
+          <h4>Последние ошибки scheduler</h4>
+          <div class="portal-error-table" role="table" aria-label="Последние ошибки scheduler">
+            <div class="portal-error-table-heading" role="row"><span role="columnheader">Источник</span><span role="columnheader">Описание</span></div>
+            {% for error in portal.scheduler.scheduler_error_events %}<div class="portal-error-table-row" role="row"><div class="portal-error-source" role="cell"><strong>Scheduler</strong><time>{{ display_datetime(error.occurred_at) }}</time></div><span class="portal-error-description" role="cell">Необработанная ошибка цикла: {{ error.exception_type }}</span></div>{% endfor %}
+          </div>
+          <p class="muted">Текст исключения намеренно не выводится: подробный trace доступен в журнале контейнера app.</p>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="muted">Runtime-метрики scheduler недоступны.</p>
+        {% endif %}
+      </section>
+      <section class="portal-detail-group">
+        <div class="portal-detail-heading"><h3>Нагрузка мониторинга</h3><button class="help-trigger" type="button" aria-label="Справка по нагрузке мониторинга" data-help-wide data-help="Все значения собираются агрегированными запросами при открытии главной страницы. Они не запускают новые проверки и не изменяют состояние объектов.&#10;&#10;Активные объекты — включённые объекты включённых площадок. SNMP объектов — активные объекты с включённым SNMP; SNMP с ошибкой — те, у которых последний реальный SNMP polling завершился ошибкой.&#10;&#10;Ручные OID, интерфейсы и расходники — текущий объём включённой SNMP-телеметрии. Для интерфейсов учитываются только выбранные и присутствующие, для расходников — присутствующие Printer-MIB записи.&#10;&#10;Размер БД и подключения показываются только для PostgreSQL. Подключения имеют вид «текущие / max_connections». Диагностика поясняет текущую оценку здоровья портала.">?</button></div>
+        <dl class="portal-stat-list">
+          <div><dt>Активных объектов</dt><dd>{{ portal.workload.active_targets }}</dd></div>
+          <div><dt>SNMP объектов</dt><dd>{{ portal.workload.snmp_targets }}</dd></div>
+          <div><dt>SNMP с ошибкой</dt><dd class="{{ 'text-warning' if portal.workload.snmp_errors else '' }}">{{ portal.workload.snmp_errors }}</dd></div>
+          <div><dt>Ручных OID</dt><dd>{{ portal.workload.snmp_metrics }}</dd></div>
+          <div><dt>Интерфейсов</dt><dd>{{ portal.workload.snmp_interfaces }}</dd></div>
+          <div><dt>Расходников</dt><dd>{{ portal.workload.snmp_supplies }}</dd></div>
+          <div><dt>Размер БД</dt><dd>{{ format_bytes(portal.workload.database_size_bytes) if portal.workload.database_size_bytes is not none else '—' }}</dd></div>
+          <div><dt>Подключения БД</dt><dd>{% if portal.workload.database_connections is not none and portal.workload.database_max_connections is not none %}{{ portal.workload.database_connections }} / {{ portal.workload.database_max_connections }}{% else %}—{% endif %}</dd></div>
+          <div><dt>Диагностика</dt><dd>{{ portal.health.detail }}</dd></div>
+        </dl>
+        {% if portal.workload.snmp_error_details %}
+        <div class="portal-error-list portal-snmp-errors">
+          <h4>Объекты с ошибкой SNMP</h4>
+          <div class="portal-error-table" role="table" aria-label="Объекты с ошибкой SNMP">
+            <div class="portal-error-table-heading" role="row"><span role="columnheader">Объект</span><span role="columnheader">Описание</span></div>
+            {% for item in portal.workload.snmp_error_details %}<div class="portal-error-table-row" role="row"><div class="portal-error-source" role="cell"><a href="/targets/{{ item.target_id }}/snmp">{{ item.target_name }}</a></div><span class="portal-error-description" role="cell">{{ item.error }}</span></div>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </section>
+    </div>
+  </details>
+</section>
+
+<form method="get" class="panel filter-bar" aria-label="Фильтры состояния">
+  <div class="filter-panel-heading"><h2>Фильтр</h2></div>
+  <input type="hidden" name="per_page" value="{{ pager.per_page }}">
+  <label>Статус<select name="status"><option value="all">Все статусы</option><option value="up" {{ 'selected' if selected_status == 'up' else '' }}>Доступны</option><option value="down" {{ 'selected' if selected_status == 'down' else '' }}>Недоступны</option><option value="unknown" {{ 'selected' if selected_status == 'unknown' else '' }}>Нет данных</option><option value="off_hours" {{ 'selected' if selected_status == 'off_hours' else '' }}>Вне рабочего времени</option></select></label>
+  <label>Состояние<select name="health" class="health-filter-select"><option value="">Все</option><option value="ok" {{ 'selected' if selected_health == 'ok' else '' }}>OK</option><option value="warning" {{ 'selected' if selected_health == 'warning' else '' }}>Warning</option><option value="critical" {{ 'selected' if selected_health == 'critical' else '' }}>Critical</option><option value="offline" {{ 'selected' if selected_health == 'offline' else '' }}>Offline</option><option value="site_unreachable" {{ 'selected' if selected_health == 'site_unreachable' else '' }}>Нет связи с площадкой</option><option value="unknown" {{ 'selected' if selected_health == 'unknown' else '' }}>Нет данных</option><option value="disabled" {{ 'selected' if selected_health == 'disabled' else '' }}>Отключён</option><option value="off_hours" {{ 'selected' if selected_health == 'off_hours' else '' }}>Вне графика</option></select></label>
+  <label>Площадка<select name="site_id"><option value="0">Все площадки</option>{% for site in sites %}<option value="{{ site.id }}" {{ 'selected' if selected_site == site.id else '' }}>{{ site.name }}</option>{% endfor %}</select></label>
+  <label>Тип<select name="kind"><option value="all">Все типы</option><option value="server" {{ 'selected' if selected_kind == 'server' else '' }}>Серверы</option><option value="computer" {{ 'selected' if selected_kind == 'computer' else '' }}>Компьютеры</option><option value="network" {{ 'selected' if selected_kind == 'network' else '' }}>Сеть</option><option value="printer" {{ 'selected' if selected_kind == 'printer' else '' }}>Принтеры</option><option value="ups" {{ 'selected' if selected_kind == 'ups' else '' }}>ИБП</option><option value="camera" {{ 'selected' if selected_kind == 'camera' else '' }}>Камеры</option><option value="website" {{ 'selected' if selected_kind == 'website' else '' }}>Сайты</option><option value="service" {{ 'selected' if selected_kind == 'service' else '' }}>Сервисы</option></select></label>
+  <label>Сортировка<select name="sort"><option value="default" {{ 'selected' if selected_sort == 'default' else '' }}>Сохранённый порядок</option><option value="open_incidents" {{ 'selected' if selected_sort == 'open_incidents' else '' }}>Открытые инциденты</option></select></label>
+  <div class="filter-actions">
+    <button class="button" type="submit">Применить</button>
+    <a class="button button-secondary" href="/?per_page={{ pager.per_page }}">Сбросить</a>
+  </div>
+</form>
+
+<section class="summary" aria-label="Сводка">
+  <article><span>Всего</span><strong>{{ counters.total }}</strong></article>
+  <article class="summary-up"><span>Доступны</span><strong>{{ counters.up }}</strong></article>
+  <article class="summary-down"><span>Недоступны</span><strong>{{ counters.down }}</strong></article>
+  <article class="summary-unknown"><span>Нет данных</span><strong>{{ counters.unknown }}</strong></article>
+  <article class="summary-off-hours"><span>Вне графика</span><strong>{{ counters.off_hours }}</strong></article>
+  <article class="summary-down"><span>Открытые инциденты</span><strong>{{ counters.incidents }}</strong></article>
+</section>
+
+<section class="panel monitoring-objects" aria-labelledby="monitoring-objects-title">
+  <div class="panel-heading monitoring-objects-heading">
+    <div><h2 id="monitoring-objects-title">Объекты <span class="badge">{{ counters.total }}</span></h2><p class="muted">Доступность и показатели активных объектов за последние 24 часа.</p></div>
+  </div>
+  {% if targets %}
+  <div class="monitoring-objects-header monitoring-objects-grid" aria-hidden="true">
+    <span>Объект</span><span>Тип / площадка</span><span>Доступность</span><span>Задержка</span><span>Проверка</span><span>SNMP</span><span>Инциденты</span><span>Уведом.</span><span>Проверено</span><span></span>
+  </div>
+  <div class="monitoring-objects-body">
+    {% for target in targets %}
+    <article id="target-{{ target.id }}" class="monitoring-object-row monitoring-objects-grid status-row-{{ target.status }}">
+      <div class="monitoring-object-cell monitoring-object-main">
+        <div class="monitoring-object-identity">
+          {% set health = target_health.get(target.id) %}
+          <div class="monitoring-object-title"><span class="status-dot status-{{ 'unknown' if health and health.state == 'site_unreachable' else target.status }}" aria-hidden="true"></span><a class="detail-title-link" href="/targets/{{ target.id }}/history">{% if target.favorite %}<span class="favorite-marker" title="Избранный объект">★</span> {% endif %}{{ target.name }}</a>{% if target.is_site_entry %}<span class="badge monitoring-site-entry">Точка входа</span>{% endif %}</div>
+          <div class="monitoring-object-endpoint" title="{{ target.address }}{% if target.checker_type != 'icmp' %}:{{ target.port }}{% endif %}">{{ target.address }}{% if target.checker_type != 'icmp' %}:{{ target.port }}{% endif %}</div>
+          {% if health and (health.services_total or health.unstable or health.state in ['warning', 'critical', 'site_unreachable']) %}{{ health_summary(health, href='/targets/' ~ target.id ~ '/history#services', compact=True) }}{% endif %}
+          <a class="monitoring-object-incidents-mobile {{ 'has-incidents' if target.open_incident_count else '' }}" href="/incidents?status=open&amp;target_id={{ target.id }}" title="Открыть незакрытые инциденты объекта: {{ target.open_incident_count }}" aria-label="Открыть незакрытые инциденты объекта {{ target.name }}: {{ target.open_incident_count }}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 17h.01"></path></svg><strong>{{ target.open_incident_count }}</strong></a>
+        </div>
+        {% if target.kind == 'printer' and supply_levels.get(target.id) %}<a class="monitoring-supply-levels" href="/targets/{{ target.id }}/snmp/supplies" aria-label="Открыть расходники принтера {{ target.name }}">{% for supply in supply_levels[target.id] %}<span class="monitoring-supply-level supply-level-{{ supply.level }}" title="{{ supply.title }}"><b>{{ supply.label }}</b> {% if supply.percent is not none %}{{ '%.0f%%'|format(supply.percent) }}{% else %}без %{% endif %}</span>{% endfor %}</a>{% endif %}
+        <div class="monitoring-object-tablet-meta"><span class="monitoring-object-kind-label">{{ target_kind_icon(target.kind) }}{{ {'server':'Сервер','computer':'Компьютер','network':'Сеть','printer':'Принтер','ups':'ИБП','camera':'Камера','website':'Сайт','service':'Сервис'}.get(target.kind, target.kind) }}</span><span class="monitoring-object-meta-separator" aria-hidden="true">·</span><span class="monitoring-object-site-name">{{ target.site_name }}</span></div>
+        <div class="monitoring-object-quick-actions">
+          <a class="icon-action" href="/targets/{{ target.id }}/history" title="История и графики" aria-label="Открыть историю и графики объекта {{ target.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M7 15l4-4 3 3 5-7"></path></svg></a>
+          {% if target.snmp_enabled %}<a class="icon-action" href="/targets/{{ target.id }}/snmp" title="SNMP" aria-label="Открыть SNMP объекта {{ target.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1"></rect><rect x="4" y="14" width="16" height="6" rx="1"></rect><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"></path></svg></a>{% endif %}
+          {% if target.comment %}<button class="icon-action comment-action" type="button" title="Комментарий" aria-label="Показать комментарий объекта {{ target.name }}" aria-expanded="false" data-help="{{ target.comment }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v10H9l-4 4V5Z"></path></svg></button>{% endif %}
+          {% if current_user.role == 'admin' %}<a class="icon-action" href="/targets?focus_target_id={{ target.id }}&amp;return_to=/" title="Изменить объект" aria-label="Изменить объект {{ target.name }}">✎</a><form method="post" action="/checks/targets/{{ target.id }}/run-now"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="icon-action" type="submit" title="Проверить доступность сейчас" aria-label="Проверить объект {{ target.name }} сейчас">↻</button></form>{% endif %}
+        </div>
+      </div>
+      <div class="monitoring-object-cell monitoring-object-kind"><strong class="monitoring-object-kind-label">{{ target_kind_icon(target.kind) }}{{ {'server':'Сервер','computer':'Компьютер','network':'Сеть','printer':'Принтер','ups':'ИБП','camera':'Камера','website':'Сайт','service':'Сервис'}.get(target.kind, target.kind) }}</strong><small>{{ target.site_name }}</small></div>
+      <div class="monitoring-object-cell monitoring-object-availability">{% if health and health.state == 'site_unreachable' %}<div><span class="badge">Нет связи</span><strong>—</strong></div><small title="Точка входа площадки">{{ health.reason }}</small><span class="monitoring-availability-track availability-unknown"><i style="width: 0%"></i></span>{% else %}<div><span class="badge {{ 'badge-success' if target.status == 'up' else 'badge-danger' if target.status == 'down' else 'badge-warning' }}">{{ {'up':'Онлайн','down':'Оффлайн','unknown':'Нет данных','off_hours':'Вне графика'}.get(target.status, target.status) }}</span><strong>{{ ('%.2f%%'|format(target.availability_24h)) if target.availability_24h is not none else '—' }}</strong></div><small>24 ч</small><span class="monitoring-availability-track {{ 'availability-unknown' if target.availability_24h is none else 'availability-good' if target.availability_24h >= availability_good_threshold else 'availability-down' if target.availability_24h < availability_warning_threshold else 'availability-warning' }}"><i style="width: {{ target.availability_24h if target.availability_24h is not none else 0 }}%"></i></span>{% endif %}</div>
+      <div class="monitoring-object-cell monitoring-object-latency"><div class="monitoring-object-latency-content"><strong>{{ ('%.2f мс'|format(target.latency_ms)) if target.latency_ms is not none else '—' }}</strong>{% if latency_sparklines.get(target.id) %}<svg viewBox="0 0 100 30" role="img" aria-label="Последние измерения задержки"><polyline points="{{ latency_sparklines[target.id] }}"></polyline></svg>{% endif %}</div></div>
+      <div class="monitoring-object-cell monitoring-object-check"><strong>{{ target.checker_type }}</strong><small>{{ target.interval_seconds // 60 }} мин</small></div>
+      <div class="monitoring-object-cell monitoring-object-snmp">{% if not target.snmp_enabled %}<span class="badge" title="SNMP выключен"><span class="snmp-status-desktop">Выкл</span><span class="snmp-status-mobile">SNMP</span></span>{% elif target.snmp_status == 'ok' %}<span class="badge badge-success" title="Последний SNMP polling успешен"><span class="snmp-status-desktop">Вкл</span><span class="snmp-status-mobile">SNMP</span></span>{% elif target.snmp_status == 'error' %}<span class="badge badge-danger" title="Последний SNMP polling завершился ошибкой"><span class="snmp-status-desktop">Ошибка</span><span class="snmp-status-mobile">SNMP</span></span>{% else %}<span class="badge badge-warning" title="SNMP ещё не опрашивался"><span class="snmp-status-desktop">Ожидание</span><span class="snmp-status-mobile">SNMP</span></span>{% endif %}{% if target.snmp_enabled %}<small>OID: {{ target.snmp_metric_count }}</small><small>Интерф.: {{ target.snmp_interface_count }}</small><small title="Настроенные SNMP-пороги">Пороги: {{ target.snmp_threshold_count }}</small>{% endif %}</div>
+      <a class="monitoring-object-cell monitoring-object-incidents {{ 'has-incidents' if target.open_incident_count else '' }}" href="/incidents?status=open&amp;target_id={{ target.id }}" title="Открыть незакрытые инциденты объекта: {{ target.open_incident_count }}" aria-label="Открыть незакрытые инциденты объекта {{ target.name }}: {{ target.open_incident_count }}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 17h.01"></path></svg><strong>{{ target.open_incident_count }}</strong></a>
+      <div class="monitoring-object-cell monitoring-object-notifications"><span class="monitoring-channel {{ 'is-active' if push_available and not target.notifications_suppressed else '' }}" title="{{ 'Push-уведомления включены' if push_available and not target.notifications_suppressed else 'Push-уведомления выключены' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path></svg></span><span class="monitoring-channel {{ 'is-active' if smtp_available and not target.notifications_suppressed else '' }}" title="{{ 'SMTP включён' if smtp_available and not target.notifications_suppressed else 'SMTP выключен' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m4 7 8 6 8-6"></path></svg></span>{% if target.notifications_suppressed %}<small>Подавлены</small>{% endif %}</div>
+      <div class="monitoring-object-cell monitoring-object-checked"{% if target.checked_at %} title="{{ display_datetime(target.checked_at) }}"{% endif %}>{% if target.checked_at %}<strong>{{ display_datetime(target.checked_at, '%d.%m.%Y') }}</strong><small>{{ display_datetime(target.checked_at, '%H:%M:%S') }}</small>{% else %}<strong>—</strong><small>ожидается</small>{% endif %}</div>
+      <div class="monitoring-object-cell monitoring-object-actions">{% if current_user.role == 'admin' %}<form method="post" action="/targets/{{ target.id }}/move"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="direction" value="up"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="monitoring-order-button" type="submit" title="Переместить выше" aria-label="Переместить объект {{ target.name }} выше" {{ 'disabled' if loop.first else '' }}>↑</button></form><form method="post" action="/targets/{{ target.id }}/move"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="direction" value="down"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="monitoring-order-button" type="submit" title="Переместить ниже" aria-label="Переместить объект {{ target.name }} ниже" {{ 'disabled' if loop.last else '' }}>↓</button></form>{% endif %}</div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}<div class="empty-state"><strong>По выбранным фильтрам объектов нет</strong><p>Сбросьте фильтры или добавьте подходящий объект.</p></div>{% endif %}
+</section>
+{{ pagination(request, pager) }}
+
+{# Visual-only Critical attention cards. Their state is supplied by the existing
+   batch Target Health calculation and does not alter incident handling. #}
+<div class="wallboard-critical-alert state-critical-alert" data-critical-alert data-critical-source="/wallboard" data-critical-storage-key="monitoring-state-critical-alerted" hidden role="alertdialog" aria-modal="true" aria-label="Критические состояния объектов">
+  <div class="wallboard-critical-alert-grid" data-critical-alert-grid></div>
+  <div class="wallboard-critical-alert-timer" aria-hidden="true"><i></i></div>
+</div>
+<div data-critical-sources hidden>{% for item in critical_alert_targets %}<i data-critical-target data-target-id="{{ item.id }}" data-target-name="{{ item.name }}" data-target-description="{{ item.description }}"></i>{% endfor %}</div>
+
+{% endblock %}

@@ -1,0 +1,14 @@
+{% macro standard_chart(chart, series, aria_label, unit='', css_class='') %}
+<div class="standard-chart" data-chart data-chart-times='{{ chart.timestamps | tojson }}' data-chart-series='{{ series | tojson }}' data-chart-max="{{ chart.scale_max }}" data-chart-unit="{{ unit }}">
+  <div class="chart-y-axis" aria-hidden="true"></div>
+  <div class="chart-plot">
+    <svg class="history-chart chart-svg {{ css_class }}" viewBox="0 0 320 74" preserveAspectRatio="none" role="img" aria-label="{{ aria_label }}">
+      <g class="chart-grid" aria-hidden="true"></g>
+      {% for item in series %}<polyline class="{{ item.css_class | default('') }}" points="{{ item.points }}"/>{% endfor %}
+      <line class="chart-cursor" x1="0" x2="0" y1="0" y2="74" hidden aria-hidden="true"></line>
+    </svg>
+    <div class="chart-x-axis" aria-hidden="true"><span></span><span></span><span></span></div>
+  </div>
+  <div class="chart-tooltip" role="status" hidden></div>
+</div>
+{% endmacro %}

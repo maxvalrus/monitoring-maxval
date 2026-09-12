@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% from "_section_icon.html" import section_icon %}
+{% block title %}Оповещения · Мониторинг Maxval{% endblock %}
+{% block body_class %}communication-page notifications-page{% endblock %}
+{% block content %}
+<section class="page-heading notification-heading">
+  <div><p class="eyebrow">События</p><div class="page-title-row">{{ section_icon('notifications') }}<h1>Оповещения</h1></div><p class="muted">Инциденты, восстановления объектов и системные события мониторинга.</p></div>
+  <div class="notification-heading-actions notification-heading-actions-desktop">
+    <form method="post" action="/notifications/read-all"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button" type="submit">Прочитать всё</button></form>
+    <form method="post" action="/notifications/delete-read" data-confirm="Удалить все прочитанные оповещения? Это действие нельзя отменить."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-secondary" type="submit">Удалить прочитанные</button></form>
+    <form method="post" action="/notifications/delete-all" data-confirm="Удалить ВСЕ ваши оповещения? Это действие нельзя отменить."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-danger" type="submit">Удалить все</button></form>
+  </div>
+  <details class="notification-mobile-menu">
+    <summary aria-label="Действия с оповещениями" title="Действия">⋮</summary>
+    <div class="notification-mobile-menu-popover">
+      <form method="post" action="/notifications/read-all"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Прочитать всё</button></form>
+      <form method="post" action="/notifications/delete-read" data-confirm="Удалить все прочитанные оповещения? Это действие нельзя отменить."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Удалить прочитанные</button></form>
+      <form method="post" action="/notifications/delete-all" data-confirm="Удалить ВСЕ ваши оповещения? Это действие нельзя отменить."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="is-danger" type="submit">Удалить всё</button></form>
+    </div>
+  </details>
+</section>
+
+
+
+<section class="notification-list section-gap">
+{% for item in notifications %}
+  <article class="panel notification-card {{ 'is-unread' if not item.read_at else '' }}">
+    <div class="notification-icon">{{ '✉' if item.kind in ['chat', 'chat_delete_request'] else ('!' if item.kind in ['incident_opened', 'push_subscription_invalid'] else '✓') }}</div>
+    <strong class="notification-title">{{ item.title }}</strong>
+    <time class="notification-date">{{ display_datetime(item.created_at, '%d.%m.%Y %H:%M') }}</time>
+    <p class="notification-body">{{ item.body }}</p>
+    <span class="badge notification-state {{ 'notification-state-read' if item.read_at else 'badge-warning notification-state-new' }}">{{ 'Прочитано' if item.read_at else 'Новое' }}</span>
+    <div class="notification-actions">
+      {% if item.link %}<form class="notification-action" method="post" action="/notifications/{{ item.id }}/read"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button" type="submit">Открыть</button></form>{% endif %}
+      {% if not item.read_at %}<form method="post" action="/notifications/{{ item.id }}/read"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="button button-secondary" type="submit">Прочитать</button></form>{% endif %}
+      <form method="post" action="/notifications/{{ item.id }}/delete" data-confirm="Удалить это оповещение?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+        <button class="button button-danger" type="submit" title="Удалить оповещение">Удалить</button>
+      </form>
+    </div>
+  </article>
+{% else %}<div class="panel notification-empty"><p class="muted">Оповещений пока нет.</p></div>{% endfor %}
+</section>
+{{ pagination(request, pager) }}
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% from "_section_icon.html" import section_icon %}
+{% block title %}Чат · Мониторинг Maxval{% endblock %}
+{% block body_class %}communication-page chat-page{% endblock %}
+{% block content %}
+<section class="page-heading chat-page-heading">
+  <div><p class="eyebrow">Связь</p><div class="page-title-row">{{ section_icon('chat') }}<h1>Внутренний чат</h1></div><p class="muted">Личные сообщения между пользователями Monitoring Maxval.</p></div>
+</section>
+<div class="chat-layout">
+  <section class="panel chat-contacts" data-chat-contacts-drawer>
+    <div class="chat-panel-heading"><h2>Диалоги</h2></div>
+    <div class="chat-contact-list">
+    {% for item in contacts %}
+      <a class="chat-contact {{ 'is-active' if selected_user and item.user.id == selected_user.id else '' }}" href="/chat?user_id={{ item.user.id }}">
+        <span class="presence-dot {{ 'is-deleted' if item.user.deleted_at else ('is-online' if item.online else 'is-offline') }}" title="{{ 'Удалён' if item.user.deleted_at else ('Онлайн' if item.online else 'Оффлайн') }}" aria-label="{{ 'Удалён' if item.user.deleted_at else ('Онлайн' if item.online else 'Оффлайн') }}"></span>
+        <span class="chat-contact-copy"><strong class="chat-contact-name">{{ item.user.username }}{% if item.user.deleted_at %} (удалён){% endif %}</strong><small>{{ item.last_message or 'Начать диалог' }}</small></span>
+        <span class="chat-contact-side"><span class="chat-role">{{ 'Администратор' if item.user.role == 'admin' else 'Наблюдатель' }}</span>{% if item.unread %}<span class="counter-badge">{{ item.unread }}</span>{% endif %}</span>
+      </a>
+    {% else %}<p class="muted chat-empty">Нет других активных пользователей.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section class="panel chat-conversation" data-chat-conversation data-peer-id="{{ selected_user.id if selected_user else '' }}">
+    {% if selected_user %}
+    <div class="chat-conversation-heading">
+      <div class="chat-peer-heading"><p class="eyebrow">Диалог</p><h2><span class="presence-dot {{ 'is-deleted' if selected_user.deleted_at else ('is-online' if selected_online else 'is-offline') }}" data-chat-peer-presence title="{{ 'Удалён' if selected_user.deleted_at else ('Онлайн' if selected_online else 'Оффлайн') }}" aria-label="{{ 'Удалён' if selected_user.deleted_at else ('Онлайн' if selected_online else 'Оффлайн') }}"></span><span>{{ selected_user.username }}{% if selected_user.deleted_at %} (удалён){% endif %}</span></h2><small class="muted">{{ 'Администратор' if selected_user.role == 'admin' else 'Наблюдатель' }}</small></div>
+      <div class="chat-heading-actions">
+        <button class="button button-secondary chat-dialogs-button" type="button" data-chat-dialogs-toggle aria-expanded="false"><span>Диалоги</span><span class="counter-badge" data-chat-drawer-badge hidden>0</span></button>
+        <div class="chat-desktop-action-stack">
+          <button class="icon-action chat-fullscreen-button" type="button" data-chat-fullscreen-toggle aria-pressed="false" title="Развернуть чат на весь экран" aria-label="Развернуть чат на весь экран"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"></path></svg></button>
+          <form method="post" action="/chat/{{ selected_user.id }}/delete-request" data-confirm="{% if selected_user.deleted_at %}Удалить переписку с {{ selected_user.username }}? Пользователь удалён, поэтому история будет удалена сразу без подтверждения.{% else %}Скрыть старую историю у себя и отправить пользователю {{ selected_user.username }} запрос на физическое удаление переписки?{% endif %}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="icon-action chat-delete-heading-button" type="submit" title="Удалить диалог" aria-label="Удалить диалог"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"></path></svg></button>
+          </form>
+        </div>
+        <button class="icon-action chat-fullscreen-button chat-mobile-fullscreen-button" type="button" data-chat-fullscreen-toggle aria-pressed="false" title="Развернуть чат на весь экран" aria-label="Развернуть чат на весь экран"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"></path></svg></button>
+        <details class="chat-mobile-actions">
+          <summary aria-label="Действия с диалогом" title="Действия">⋮</summary>
+          <div class="chat-mobile-actions-popover">
+            <form method="post" action="/chat/{{ selected_user.id }}/delete-request" data-confirm="{% if selected_user.deleted_at %}Удалить переписку с {{ selected_user.username }}? Пользователь удалён, поэтому история будет удалена сразу без подтверждения.{% else %}Скрыть старую историю у себя и отправить пользователю {{ selected_user.username }} запрос на физическое удаление переписки?{% endif %}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="is-danger" type="submit">Удалить диалог</button>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="chat-messages" data-chat-messages data-has-more="{{ 'true' if has_more else 'false' }}">
+      <div class="chat-history-loader" data-chat-history-loader {% if not has_more %}hidden{% endif %}>Загрузка предыдущих сообщений…</div>
+      {% if hidden_history_available and outgoing_deletion_request and outgoing_deletion_request.status == 'pending' %}
+      <div class="chat-deletion-status chat-history-boundary"><span>Старая история скрыта. Ожидается подтверждение удаления от {{ selected_user.username }}.</span><form method="post" action="/chat/{{ selected_user.id }}/restore-history"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-secondary chat-history-restore" type="submit">Восстановить историю</button></form></div>
+      {% elif hidden_history_available and outgoing_deletion_request and outgoing_deletion_request.status == 'rejected' %}
+      <div class="chat-deletion-status chat-history-boundary"><span>Старая история скрыта у вас. {{ selected_user.username }} отклонил физическое удаление.</span><form method="post" action="/chat/{{ selected_user.id }}/restore-history"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-secondary chat-history-restore" type="submit">Восстановить историю</button></form></div>
+      {% endif %}
+      {% for message in messages %}
+      <article class="chat-message {{ 'is-own' if message.sender_id == current_user.id else 'is-other' }}" data-message-id="{{ message.id }}">
+        <div class="chat-message-meta"><strong>{{ current_user.username if message.sender_id == current_user.id else selected_user.username ~ (' (удалён)' if selected_user.deleted_at else '') }}</strong><span><time>{{ display_datetime(message.created_at, '%d.%m.%Y %H:%M') }}</time>{% if message.sender_id == current_user.id and not selected_user.deleted_at %}<button class="chat-message-edit-button" type="button" data-chat-edit-toggle aria-expanded="false" title="Изменить сообщение" aria-label="Изменить сообщение">✎</button>{% endif %}</span></div>
+        <p>{% for part in message_parts.get(message.id, []) %}{% if part.target_id is defined %}<a class="chat-target-mention" href="/?focus_target_id={{ part.target_id }}" title="Открыть объект на странице состояния">{{ part.text }}</a>{% else %}{{ part.text }}{% endif %}{% endfor %}</p>
+        {% if message.sender_id == current_user.id and not selected_user.deleted_at %}<form class="chat-message-editor" method="post" action="/chat/messages/{{ message.id }}/edit" hidden><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="recipient_id" value="{{ selected_user.id }}"><label class="sr-only" for="chat-message-{{ message.id }}">Текст сообщения</label><textarea id="chat-message-{{ message.id }}" name="body" rows="2" maxlength="2000" required>{{ message.body }}</textarea><span><button class="button button-secondary" type="button" data-chat-edit-cancel>Отмена</button><button class="button" type="submit">Сохранить</button></span></form>{% endif %}
+        {% if message.sender_id == current_user.id %}<small data-chat-read-state="{{ 'read' if message.read_at else 'delivered' }}">{{ 'Прочитано' if message.read_at else 'Доставлено' }}</small>{% endif %}{% if message.id in edited_message_ids %}<small class="chat-message-edited">Изменено</small>{% endif %}
+      </article>
+      {% else %}<p class="muted chat-no-messages">Сообщений пока нет.</p>{% endfor %}
+
+      {% for deletion in incoming_deletion_requests %}
+      <article class="chat-system-request" data-deletion-request-id="{{ deletion.id }}">
+        <strong>{{ selected_user.username }} хочет удалить историю диалога</strong>
+        <p>При подтверждении все сообщения до {{ display_datetime(deletion.cutoff_at, '%d.%m.%Y %H:%M') }} будут физически удалены для обоих участников. Новые сообщения останутся.</p>
+        <div class="chat-request-actions">
+          <form method="post" action="/chat/deletion-requests/{{ deletion.id }}/confirm"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-danger" type="submit">Подтвердить удаление</button></form>
+          <form method="post" action="/chat/deletion-requests/{{ deletion.id }}/reject"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-secondary" type="submit">Отклонить</button></form>
+        </div>
+      </article>
+      {% endfor %}
+
+      <button class="button chat-new-messages" type="button" data-chat-new-messages hidden>↓ Новые сообщения</button>
+    </div>
+
+    {% if selected_user.deleted_at %}
+    <div class="chat-deleted-peer-note muted">Пользователь удалён. История доступна только для просмотра.</div>
+    {% else %}
+    <form class="chat-compose" method="post" action="/chat/send" data-chat-compose data-chat-targets='{{ chat_targets|tojson }}'>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="recipient_id" value="{{ selected_user.id }}">
+      <div class="chat-compose-field">
+        <label class="sr-only" for="chat-body">Сообщение</label>
+        <textarea id="chat-body" name="body" rows="2" maxlength="2000" placeholder="Напишите сообщение…" required data-chat-body></textarea>
+        <div class="chat-target-suggestions" data-chat-target-suggestions hidden role="listbox" aria-label="Объекты для упоминания"></div>
+        <small class="chat-character-counter" data-chat-counter aria-live="polite">0 / 2000</small>
+      </div>
+      <button class="button button-primary" type="submit">Отправить</button>
+    </form>
+    {% endif %}
+    {% else %}<p class="muted chat-no-selection">Выберите пользователя для начала диалога.</p>{% endif %}
+  </section>
+  <button class="chat-drawer-backdrop" type="button" data-chat-drawer-backdrop aria-label="Закрыть список диалогов" hidden></button>
+</div>
+{% endblock %}

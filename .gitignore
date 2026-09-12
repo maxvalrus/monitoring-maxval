@@ -1,0 +1,16 @@
+.env
+
+# Runtime secrets, certificates and operational data.
+tls/
+caddy/Caddyfile
+backups/
+releases/
+patchfromchat/
+
+# Local build and test artifacts.
+build/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/

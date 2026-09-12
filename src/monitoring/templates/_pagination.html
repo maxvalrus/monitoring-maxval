@@ -1,0 +1,17 @@
+{% macro pagination(request, pager) %}
+<div class="list-toolbar">
+  <div class="pagination" role="navigation" aria-label="Навигация по страницам">
+    {% if pager.page > 1 %}<a class="page-button" href="{{ page_url(request, 1, pager.per_page) }}" aria-label="Первая страница">«</a>{% else %}<span class="page-button disabled" aria-hidden="true">«</span>{% endif %}
+    {% if pager.page > 1 %}<a class="page-button" href="{{ page_url(request, pager.page - 1, pager.per_page) }}" aria-label="Предыдущая страница">‹</a>{% else %}<span class="page-button disabled" aria-hidden="true">‹</span>{% endif %}
+    <span>Страница <strong>{{ pager.page }}</strong> из <strong>{{ pager.pages }}</strong></span>
+    {% if pager.page < pager.pages %}<a class="page-button" href="{{ page_url(request, pager.page + 1, pager.per_page) }}" aria-label="Следующая страница">›</a>{% else %}<span class="page-button disabled" aria-hidden="true">›</span>{% endif %}
+    {% if pager.page < pager.pages %}<a class="page-button" href="{{ page_url(request, pager.pages, pager.per_page) }}" aria-label="Последняя страница">»</a>{% else %}<span class="page-button disabled" aria-hidden="true">»</span>{% endif %}
+  </div>
+  <form method="get" class="page-size-form">
+    {% for key, value in request.query_params.items() %}{% if key not in ('page', 'per_page', 'notice', 'error') %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
+    <label>Строк на странице <input type="number" name="per_page" value="{{ pager.per_page }}" min="1" max="1000" inputmode="numeric"></label>
+    <button class="button" type="submit">Применить</button>
+  </form>
+  <span class="total-count">Всего: {{ pager.total }}</span>
+</div>
+{% endmacro %}

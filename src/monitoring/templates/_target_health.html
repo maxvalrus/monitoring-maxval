@@ -1,0 +1,68 @@
+{% macro health_badge(health) -%}
+<span class="target-health-badge target-health-{{ health.state }}">{{ health.label }}</span>
+{%- endmacro %}
+
+{% macro health_summary(health, href=None, compact=False) -%}
+{% if health %}
+<div class="target-health-summary{{ ' target-health-summary-compact' if compact else '' }}">
+  {{ health_badge(health) }}
+  {% if health.unstable %}<span class="badge badge-warning unstable-link-badge">Нестабильная связь</span>{% endif %}
+  {% if health.services_total and health.services_ok is not none %}<span class="target-health-services">{{ health.services_ok }}/{{ health.services_total }}</span>{% endif %}
+  {% if health.reason %}
+    {% if href %}<a class="target-health-reason" href="{{ href }}">{{ health.reason }}{% if health.additional_problem_count %} · ещё {{ health.additional_problem_count }}{% endif %}</a>
+    {% else %}<span class="target-health-reason">{{ health.reason }}{% if health.additional_problem_count %} · ещё {{ health.additional_problem_count }}{% endif %}</span>{% endif %}
+  {% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro services_panel(health, target, display_datetime, format_bytes, include_primary=True) -%}
+{% set visible_services = health.services if health and include_primary else health.services|rejectattr('is_primary')|list if health else () %}
+{% if visible_services %}
+<section id="services" class="panel service-health-panel">
+  <div class="panel-heading service-health-heading">
+    <div>
+      <div class="service-health-title-row">
+        <h2>Сервисы</h2>
+        {% if health.services_ok is not none %}<span class="badge {{ 'badge-success' if health.services_ok == health.services_total else 'badge-warning' }}">{{ health.services_ok }}/{{ health.services_total }}</span>
+        {% elif health.state == 'offline' %}<span class="badge badge-danger">Основная недоступна</span>
+        {% elif health.state == 'off_hours' %}<span class="badge">Вне графика</span>
+        {% elif health.state == 'disabled' %}<span class="badge">Объект отключён</span>
+        {% elif health.state == 'site_unreachable' %}<span class="badge">Нет связи с площадкой</span>
+        {% else %}<span class="badge">Нет данных</span>{% endif %}
+      </div>
+      <p class="muted">Текущее состояние основной и дополнительных проверок. Настройка сервисов выполняется через «Изменить объект».</p>
+    </div>
+  </div>
+  <div class="table-wrap service-health-table-wrap">
+    <table class="entity-table responsive-table service-health-table">
+      <thead><tr><th>Сервис</th><th>Проверка</th><th>Адрес</th><th>Состояние</th><th>Последняя</th><th class="service-directory-files-action-heading">Файлы</th></tr></thead>
+      <tbody>
+      {% for service in visible_services %}
+        <tr class="{{ 'entity-disabled' if not service.enabled else '' }}">
+          <td data-label="Сервис"><div class="service-health-name"><strong>{{ service.name }}</strong>{% if service.is_primary %}<span class="badge">Основная</span>{% endif %}</div></td>
+          <td data-label="Проверка"><code>{{ 'Каталог' if service.checker_type == 'directory' else service.checker_type|upper }}{% if service.checker_type == 'dns' %} {{ service.dns_record_type or 'A' }}{% endif %}</code>{% if service.checker_type not in ['icmp', 'dns', 'directory'] %} · {{ service.port }}{% endif %}{% if service.checker_type in ['http','https'] and service.path != '/' %}<small class="muted service-health-path">{{ service.path }}</small>{% endif %}</td>
+          <td data-label="Адрес"><span class="service-health-address">{{ service.address }}</span>{% if service.checker_type == 'directory' and service.directory_scanned_at %}<small class="muted">За период: {{ service.directory_recent_count or 0 }} файлов</small>{% endif %}</td>
+          <td data-label="Состояние"><div class="service-status-stack"><span class="badge {{ 'badge-success' if service.status == 'up' else 'badge-danger' if service.status in ['down', 'disabled'] else 'badge-warning' if service.status == 'unknown' }}"{% if service.message %} title="{{ service.message }}"{% endif %}>{{ service.label }}</span>{% if service.unstable %}<span class="badge badge-warning unstable-link-badge">Нестабильная связь</span>{% endif %}</div></td>
+          <td data-label="Последняя"><span>{{ display_datetime(service.checked_at) if service.checked_at else '—' }}</span>{% if service.latency_ms is not none %}<small class="muted">{{ '%.0f'|format(service.latency_ms) }} мс</small>{% endif %}{% if service.tls_days_remaining is not none %}<small class="service-tls-health service-tls-{{ service.tls_health or 'ok' }}">Сертификат: {% if service.tls_days_remaining < 0 %}просрочен на {{ '%.0f'|format(-service.tls_days_remaining) }} дн.{% elif service.tls_health == 'ok' %}ещё {{ '%.0f'|format(service.tls_days_remaining) }} дн.{% else %}истекает через {{ '%.0f'|format(service.tls_days_remaining) }} дн.{% endif %}</small>{% endif %}</td>
+          <td class="service-directory-files-action" data-label="Файлы">{% if service.checker_type == 'directory' and service.directory_files %}<button class="icon-action" type="button" data-table-editor-toggle="directory-files-{{ service.check_id }}" aria-controls="directory-files-{{ service.check_id }}" aria-expanded="false" title="Показать последние файлы" aria-label="Показать последние файлы сервиса {{ service.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6l2 2h8v9H4z"></path><path d="M8 13h8M8 16h5"></path></svg></button>{% else %}—{% endif %}</td>
+        </tr>
+        {% if service.checker_type == 'directory' and service.directory_files %}
+        <tr class="service-directory-files-row" data-directory-files-row>
+          <td colspan="6">
+            <details id="directory-files-{{ service.check_id }}" class="table-editor service-directory-files"><summary>Последние файлы</summary><div class="table-wrap service-directory-files-wrap">
+              <table class="entity-table service-directory-files-table">
+                <thead><tr><th>Файл</th><th>Размер</th><th>Изменён</th></tr></thead>
+                <tbody>{% for file in service.directory_files %}<tr><td>{{ file.name }}</td><td>{{ format_bytes(file.size_bytes) }}</td><td>{{ display_datetime(file.modified_at) }}</td></tr>{% endfor %}</tbody>
+              </table>
+            </div></details>
+          </td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{%- endmacro %}

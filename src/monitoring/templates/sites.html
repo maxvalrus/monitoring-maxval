@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% from "_sortable_header.html" import sortable_header %}
+{% from "_section_icon.html" import section_icon %}
+{% block title %}Площадки · Мониторинг Maxval{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">Структура</p><div class="page-title-row">{{ section_icon('sites') }}<h1>Площадки</h1></div><p class="muted">Центральный офис и удалённые филиалы.</p></div></section>
+
+{% if current_user.role == 'admin' %}
+<section class="panel form-panel">
+  <h2>Добавить площадку</h2>
+  <form method="post" action="/sites" class="inline-form create-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+    <label>Название<input name="name" required maxlength="120" placeholder="Филиал Север"></label>
+    <label class="grow">Описание<input name="description" maxlength="500" placeholder="Необязательно"></label>
+    <label>График работы<select name="schedule_id">{% for schedule in schedules %}<option value="{{ schedule.id }}" {{ 'selected' if schedule.id == 0 else '' }}>{{ schedule.name }}</option>{% endfor %}</select></label>
+    <div class="form-actions"><button class="button button-primary" type="submit">Добавить</button></div>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel table-wrap entity-table-wrap">
+  <table class="entity-table sites-table responsive-table {{ 'sites-table-with-actions' if current_user.role == 'admin' else 'sites-table-without-actions' }}">
+    <thead><tr>
+      {{ sortable_header(request, 'Порядок', 'display_order', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Название', 'name', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Описание', 'description', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Объекты', 'target_count', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'График', 'schedule', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Состояние', 'enabled', sort_state.column, sort_state.direction) }}
+      {% if current_user.role == 'admin' %}<th class="actions-header">Действия</th>{% endif %}
+    </tr></thead>
+    <tbody>
+      {% for site, target_count, site_entry_target_id in site_rows %}
+      <tr class="{{ 'entity-disabled' if not site.enabled else '' }}">
+        <td class="site-order-value" data-label="Порядок">{{ loop.index + pager.offset }}</td>
+        <td data-label="Название"><div class="entity-name-cell"><strong>{{ site.name }}</strong><small class="entity-id">ID: {{ site.id }}</small></div></td>
+        <td data-label="Описание">{{ site.description or 'Без описания' }}</td>
+        <td data-label="Объекты"><div class="site-target-count">{{ target_count }}{% if site_entry_target_id %}<a class="site-entry-link" href="/?focus_target_id={{ site_entry_target_id }}" title="Открыть точку входа площадки на странице состояния" aria-label="Открыть точку входа площадки {{ site.name }} на странице состояния"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="5" rx="1"></rect><rect x="4" y="14" width="16" height="5" rx="1"></rect><path d="M8 7.5h.01M8 16.5h.01M12 7.5h5M12 16.5h5"></path></svg></a>{% endif %}</div></td>
+        <td data-label="График"><a href="/schedules">{{ site.schedule.name if site.schedule else 'Круглосуточно' }}</a></td>
+        <td data-label="Состояние"><span class="badge {{ 'badge-success' if site.enabled else 'badge-danger' }}">{{ 'Активна' if site.enabled else 'Отключена' }}</span></td>
+        {% if current_user.role == 'admin' %}
+        <td class="actions-cell" data-label="Действия">
+          <div class="site-actions-layout">
+            <div class="table-actions site-table-actions">
+              <button class="icon-action site-table-action site-edit-button" type="button" data-table-editor-toggle="site-{{ site.id }}-editor" aria-controls="site-{{ site.id }}-editor" aria-expanded="false" title="Изменить площадку" aria-label="Изменить площадку {{ site.name }}">✎</button>
+              <a class="icon-action site-table-action" href="/sites/{{ site.id }}/layout" title="Настроить схему площадки" aria-label="Настроить схему площадки {{ site.name }}">⌘</a>
+              <form method="post" action="/sites/{{ site.id }}/toggle">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                <button class="icon-action site-table-action site-toggle-action" type="submit" title="{{ 'Отключить площадку' if site.enabled else 'Включить площадку' }}" aria-label="{{ 'Отключить площадку ' ~ site.name if site.enabled else 'Включить площадку ' ~ site.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9"></path><path d="M7.1 5.8a8 8 0 1 0 9.8 0"></path></svg></button>
+              </form>
+              <form method="post" action="/sites/{{ site.id }}/targets/delete-all" data-confirm="Удалить все объекты площадки «{{ site.name }}» вместе с их результатами и инцидентами?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                <button class="icon-action site-table-action site-delete-action site-delete-targets-action" type="submit" title="Удалить все объекты площадки" aria-label="Удалить все объекты площадки {{ site.name }}" {{ 'disabled' if not target_count else '' }}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="13" height="5" rx="1"></rect><rect x="3" y="12" width="13" height="5" rx="1"></rect><path d="M7 6.5h.01M7 14.5h.01M11 6.5h2M11 14.5h2M18 15l4 4M22 15l-4 4"></path></svg></button>
+              </form>
+              <form method="post" action="/sites/{{ site.id }}/delete" data-confirm="Удалить пустую площадку «{{ site.name }}»?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                <button class="icon-action site-table-action site-delete-action site-delete-site-action" type="submit" title="Удалить площадку" aria-label="Удалить площадку {{ site.name }}" {{ 'disabled' if target_count else '' }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 20s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10z"></path><circle cx="11" cy="10" r="1.8"></circle><path d="m17 16 4 4M21 16l-4 4"></path></svg></button>
+              </form>
+            </div>
+            <div class="site-order-controls" aria-label="Порядок площадки {{ site.name }}">
+              <form method="post" action="/sites/{{ site.id }}/move">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="direction" value="up"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="order-button" type="submit" title="Поднять площадку выше" aria-label="Поднять площадку {{ site.name }} выше">↑</button>
+              </form>
+              <form method="post" action="/sites/{{ site.id }}/move">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="direction" value="down"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="order-button" type="submit" title="Опустить площадку ниже" aria-label="Опустить площадку {{ site.name }} ниже">↓</button>
+              </form>
+            </div>
+          </div>
+        </td>
+        {% endif %}
+      </tr>
+      {% if current_user.role == 'admin' %}
+      <tr class="edit-row" data-site-edit-row>
+        <td colspan="7">
+          <details id="site-{{ site.id }}-editor" class="table-editor"><summary class="site-editor-summary">Редактор площадки {{ site.name }}</summary>
+            <form method="post" action="/sites/{{ site.id }}/update" class="inline-form compact-form site-edit-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+              <label>Название<input name="name" value="{{ site.name }}" required maxlength="120"></label>
+              <label class="grow">Описание<input name="description" value="{{ site.description or '' }}" maxlength="500"></label>
+              <label>График работы<select name="schedule_id">{% for schedule in schedules %}<option value="{{ schedule.id }}" {{ 'selected' if schedule.id == site.schedule_id else '' }}>{{ schedule.name }}</option>{% endfor %}</select></label>
+              <button class="button" type="submit">Сохранить</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+      {% endif %}
+      {% else %}
+      <tr><td colspan="{{ 7 if current_user.role == 'admin' else 6 }}">Площадки пока не добавлены.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{{ pagination(request, pager) }}
+{% endblock %}

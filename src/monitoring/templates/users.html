@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% from "_sortable_header.html" import sortable_header %}
+{% from "_section_icon.html" import section_icon %}
+{% block title %}Пользователи · Мониторинг Maxval{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">Доступ</p><div class="page-title-row">{{ section_icon('users') }}<h1>Пользователи</h1></div><p class="muted">Администраторы управляют системой, наблюдатели работают только на чтение.</p></div></section>
+
+<section class="panel form-panel">
+  <h2>Создать пользователя</h2>
+  <form method="post" action="/users" class="inline-form create-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+    <label>Логин<input name="username" required minlength="3" maxlength="64" autocomplete="off"></label>
+    <label>Пароль<input type="password" name="password" required minlength="{{ min_password_length }}" maxlength="64" autocomplete="new-password"></label>
+    <label>Роль<select name="role"><option value="viewer">Наблюдатель</option><option value="admin">Администратор</option></select></label>
+    <div class="form-actions"><button class="button button-primary" type="submit">Создать</button></div>
+  </form>
+</section>
+
+<section class="panel table-wrap entity-table-wrap">
+  <table class="entity-table users-table responsive-table">
+    <thead><tr>
+      {{ sortable_header(request, 'Логин', 'username', user_sort_state.column, user_sort_state.direction) }}
+      {{ sortable_header(request, 'Роль', 'role', user_sort_state.column, user_sort_state.direction) }}
+      {{ sortable_header(request, 'Состояние', 'active', user_sort_state.column, user_sort_state.direction) }}
+      {{ sortable_header(request, 'Последний вход', 'last_login_at', user_sort_state.column, user_sort_state.direction) }}
+      {{ sortable_header(request, 'IP последнего входа', 'last_login_ip', user_sort_state.column, user_sort_state.direction) }}
+      <th class="actions-header">Действия</th>
+    </tr></thead>
+    <tbody>
+  {% for user in users %}
+      <tr class="{{ 'entity-disabled' if not user.active else '' }}">
+        <td data-label="Логин"><div class="entity-name-cell"><strong>{{ user.username }}</strong><small class="entity-id">ID: {{ user.id }}</small></div></td>
+        <td data-label="Роль">{{ 'Администратор' if user.role == 'admin' else 'Наблюдатель' }}</td>
+        <td data-label="Состояние"><span class="badge {{ 'badge-success' if user.active else 'badge-danger' }}">{{ 'Активен' if user.active else 'Отключён' }}</span></td>
+        <td data-label="Последний вход">{{ display_datetime(user.last_login_at, '%d.%m.%Y %H:%M %Z') if user.last_login_at else 'Ещё не входил' }}</td>
+        <td data-label="IP последнего входа">{{ user.last_login_ip or '—' }}</td>
+        <td class="actions-cell" data-label="Действия"><button class="icon-action user-edit-button" type="button" data-table-editor-toggle="user-{{ user.id }}-editor" aria-controls="user-{{ user.id }}-editor" aria-expanded="false" title="Изменить пользователя" aria-label="Изменить пользователя {{ user.username }}">✎</button></td>
+      </tr>
+      <tr class="edit-row" data-user-edit-row>
+        <td colspan="6">
+          <details class="table-editor" id="user-{{ user.id }}-editor"><summary class="user-editor-summary">Редактор пользователя {{ user.username }}</summary>
+            <div class="user-editor-grid">
+              <form method="post" action="/users/{{ user.id }}/update" class="inline-form compact-form user-update-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                <label class="setting-toggle-control user-active-control"><input type="checkbox" name="active" value="true" {{ 'checked' if user.active else '' }}><span><strong>Активен</strong><small>Разрешает пользователю вход в Monitoring Maxval.</small></span></label>
+                <div class="user-role-actions"><label>Роль<select name="role"><option value="viewer" {{ 'selected' if user.role == 'viewer' else '' }}>Наблюдатель</option><option value="admin" {{ 'selected' if user.role == 'admin' else '' }}>Администратор</option></select></label><button class="button" type="submit">Сохранить</button></div>
+              </form>
+              <form method="post" action="/users/{{ user.id }}/password" class="inline-form compact-form user-password-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                <label>Новый пароль<input type="password" name="password" required minlength="{{ min_password_length }}" maxlength="64" autocomplete="new-password"></label>
+                <button class="button" type="submit">Сменить и завершить сессии</button>
+              </form>
+              <div class="user-delete-slot">
+                {% if user.id != current_user.id %}
+                <form method="post" action="/users/{{ user.id }}/delete" class="user-delete-form" data-confirm="Удалить пользователя «{{ user.username }}»? Это действие нельзя отменить.">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                  <button class="button button-danger" type="submit">Удалить пользователя</button>
+                </form>
+                {% endif %}
+              </div>
+            </div>
+          </details>
+        </td>
+      </tr>
+  {% else %}
+      <tr><td colspan="6">Пользователей пока нет.</td></tr>
+  {% endfor %}
+    </tbody>
+  </table>
+</section>
+{{ pagination(request, pager) }}
+
+{% if blocks %}
+<section class="panel form-panel active-blocks-panel">
+  <h2>Активные блокировки</h2>
+  <div class="table-wrap">
+    <table class="responsive-table blocks-table">
+      <thead><tr>
+        {{ sortable_header(request, 'Логин', 'username', block_sort_state.column, block_sort_state.direction, 'block_sort', 'block_direction') }}
+        {{ sortable_header(request, 'IP', 'ip_address', block_sort_state.column, block_sort_state.direction, 'block_sort', 'block_direction') }}
+        {{ sortable_header(request, 'До', 'blocked_until', block_sort_state.column, block_sort_state.direction, 'block_sort', 'block_direction') }}
+        <th class="actions-header">Действие</th>
+      </tr></thead>
+      <tbody>
+        {% for block in blocks %}
+        <tr>
+          <td data-label="Логин">{{ block.username }}</td>
+          <td data-label="IP">{{ block.ip_address }}</td>
+          <td data-label="До">{{ display_datetime(block.blocked_until, '%d.%m.%Y %H:%M %Z') }}</td>
+          <td class="actions-cell" data-label="Действие"><form method="post" action="/users/blocks/{{ block.id }}/delete"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="button button-secondary" type="submit">Разблокировать</button></form></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

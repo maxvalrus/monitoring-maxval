@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ target.name }} · Расходники SNMP{% endblock %}
+{% block content %}
+<div class="snmp-page snmp-supplies-page">
+  <section class="page-heading snmp-heading">
+    <div class="snmp-heading-copy">
+      <p class="eyebrow">Printer-MIB</p>
+      <div class="snmp-title-row"><span class="snmp-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 8V4h10v4M7 17h10v3H7z"></path><rect x="4" y="8" width="16" height="9" rx="2"></rect><path d="M8 12h.01"></path></svg></span><h1>Расходники · {{ target.name }}</h1></div>
+      <p class="muted snmp-heading-description">Тонер, картриджи и другие расходники из стандартной таблицы Printer-MIB. Значения −1/−2/−3 не превращаются в проценты и не вызывают ложные пороги.</p>
+    </div>
+    <div class="page-heading-actions snmp-heading-actions">
+      <div class="snmp-header-icon-actions">
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp" title="SNMP" aria-label="SNMP"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1"></rect><rect x="4" y="14" width="16" height="6" rx="1"></rect><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/interfaces" title="Интерфейсы" aria-label="Интерфейсы"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="6" height="6" rx="1"></rect><rect x="15" y="14" width="6" height="6" rx="1"></rect><path d="M9 7h3a3 3 0 0 1 3 3v4M9 17h3a3 3 0 0 0 3-3"></path></svg></a>
+        {% if current_user.role == 'admin' %}<a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/discovery" title="OID Discovery" aria-label="OID Discovery"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="5"></circle><path d="m14 14 6 6M8 10h4M10 8v4"></path></svg></a>{% endif %}
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/thresholds" title="Пороги" aria-label="Пороги"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M11 16v4"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/history" title="История доступности" aria-label="История доступности"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading snmp-supply-heading">
+      <div>
+        <h2>Расходники принтера</h2>
+        <p class="muted">После обнаружения уровни обновляются автоматически вместе с обычным SNMP polling. Для уведомлений создайте порог по источнику «Расходник».</p>
+      </div>
+      {% if current_user.role == 'admin' %}
+      <div class="snmp-supply-actions">
+        <form method="post" action="/targets/{{ target.id }}/snmp/supplies/discover">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="button" type="submit">Обнаружить</button>
+        </form>
+        <form method="post" action="/targets/{{ target.id }}/snmp/supplies/poll">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="button button-secondary" type="submit">Обновить уровни</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% if not config or not config.enabled %}<div class="alert alert-warning">SNMP выключен. Сначала включите SNMP на странице объекта.</div>{% endif %}
+  </section>
+
+  <section class="panel table-wrap">
+    <table class="entity-table responsive-table snmp-supplies-table">
+      <thead><tr><th>Расходник</th><th>Тип</th><th>Класс</th><th>Уровень</th><th>Вместимость</th><th>Единица</th><th>Состояние</th><th>Обновлено</th>{% if current_user.role == 'admin' %}<th class="actions-header">Действия</th>{% endif %}</tr></thead>
+      <tbody>
+      {% for supply in supplies %}
+        <tr class="{{ 'is-muted' if not supply.present else '' }}">
+          <td data-label="Расходник"><strong>{{ supply.display_name }}</strong>{% if supply.custom_name and supply.description %}<small class="muted" title="Исходное имя Printer-MIB: {{ supply.description }}">Пользовательское имя</small>{% endif %}<small class="muted">hrDevice {{ supply.hr_device_index }} · index {{ supply.supply_index }}</small></td>
+          <td data-label="Тип">{{ supply_type_label(supply.supply_type) }}</td>
+          <td data-label="Класс">{{ supply_class_label(supply.supply_class) }}</td>
+          <td data-label="Уровень"><strong>{{ supply_level_label(level=supply.level, percent_remaining=supply.percent_remaining, level_state=supply.level_state) }}</strong>{% if supply.supply_class == 4 and supply.percent_remaining is not none %}<small class="muted">свободно</small>{% endif %}</td>
+          <td data-label="Вместимость">{% if supply.max_capacity is not none and supply.max_capacity >= 0 %}{{ supply.max_capacity }}{% else %}—{% endif %}</td>
+          <td data-label="Единица">{{ supply_unit_label(supply.unit_code) }}</td>
+          <td data-label="Состояние">{% if not supply.present %}<span class="badge badge-warning">Не найден</span>{% elif supply.last_error %}<span class="badge badge-danger">Ошибка</span><small class="muted">{{ supply.last_error }}</small>{% elif supply.percent_remaining is not none %}<span class="badge badge-success">Данные есть</span>{% else %}<span class="badge badge-warning">Без процента</span>{% endif %}</td>
+          <td data-label="Обновлено">{{ display_datetime(supply.last_polled_at) if supply.last_polled_at else '—' }}</td>
+          {% if current_user.role == 'admin' %}<td class="snmp-actions-column" data-label="Действия"><button class="button button-secondary button-compact snmp-edit-button" type="button" data-table-editor-toggle="snmp-supply-editor-{{ supply.id }}" aria-controls="snmp-supply-editor-{{ supply.id }}" aria-expanded="false" title="Изменить имя расходника {{ supply.display_name }}" aria-label="Изменить имя расходника {{ supply.display_name }}">✎</button></td>{% endif %}
+        </tr>
+        {% if current_user.role == 'admin' %}
+        <tr class="edit-row snmp-supply-edit-row">
+          <td colspan="9">
+            <details id="snmp-supply-editor-{{ supply.id }}" class="table-editor"><summary class="snmp-editor-summary">Редактор имени расходника {{ supply.display_name }}</summary>
+              <form method="post" action="/targets/{{ target.id }}/snmp/supplies/{{ supply.id }}/name" class="snmp-supply-edit-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <label>Пользовательское имя<input name="custom_name" value="{{ supply.custom_name or '' }}" maxlength="160" placeholder="{{ supply.description or ('Расходник ' ~ supply.supply_index) }}"></label>
+                <small class="muted">Пустое поле возвращает исходное имя из Printer-MIB.</small>
+                <button class="button" type="submit">Сохранить</button>
+              </form>
+            </details>
+          </td>
+        </tr>
+        {% endif %}
+      {% else %}
+        <tr><td colspan="{{ 9 if current_user.role == 'admin' else 8 }}" class="empty-state">Расходники ещё не обнаружены. Запустите поиск Printer-MIB.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}

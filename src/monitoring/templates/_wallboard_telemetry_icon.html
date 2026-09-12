@@ -1,0 +1,23 @@
+{% macro wallboard_telemetry_icon(name) -%}
+<svg class="telemetry-icon" viewBox="0 0 24 24" aria-hidden="true">
+  {% if name == 'portal' %}
+  <rect x="4" y="3" width="16" height="18" rx="2"></rect><path d="M8 7h8M8 12h3M8 16h5M17 12h.01M17 16h.01"></path>
+  {% elif name == 'cpu' %}
+  <rect x="7" y="7" width="10" height="10" rx="1"></rect><rect x="10" y="10" width="4" height="4" rx=".5"></rect><path d="M9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4"></path>
+  {% elif name == 'memory' %}
+  <path d="M5 6h14v12H5zM8 9h8M8 12h8M8 15h5"></path>
+  {% elif name == 'disk' %}
+  <path d="M5 4h14v16H5zM8 4v6h7V4M9 16h6"></path><circle cx="16" cy="16" r="1"></circle>
+  {% elif name == 'checks' %}
+  <circle cx="12" cy="12" r="8"></circle><path d="m8.5 12 2.3 2.3 4.8-5"></path>
+  {% elif name == 'queue' %}
+  <path d="M5 7h14M5 12h14M5 17h10"></path><circle cx="3" cy="7" r=".7"></circle><circle cx="3" cy="12" r=".7"></circle><circle cx="3" cy="17" r=".7"></circle>
+  {% elif name == 'scheduler' %}
+  <circle cx="12" cy="12" r="7"></circle><path d="M12 8v4l3 2M12 3v2M12 19v2M3 12h2M19 12h2"></path>
+  {% elif name == 'network' %}
+  <path d="M5 7h11M13 4l3 3-3 3M19 17H8M11 14l-3 3 3 3"></path>
+  {% elif name == 'objects' %}
+  <rect x="4" y="4" width="16" height="11" rx="1.5"></rect><path d="M8 20h8M12 15v5M7 9h10"></path>
+  {% endif %}
+</svg>
+{%- endmacro %}

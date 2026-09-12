@@ -1,0 +1,31 @@
+{% macro target_tools(target, show_history=True, csrf_token='', return_to='', show_snmp=True) -%}
+{% if show_history or show_snmp or target.comment or target.notifications_suppressed or csrf_token %}
+<div class="target-tools" aria-label="Дополнительная информация и действия объекта">
+  <div class="target-tool-actions">
+    {% if show_history %}
+    <a class="icon-action" href="/targets/{{ target.id }}/history" title="График и статистика" aria-label="Открыть график и статистику объекта {{ target.name }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M7 15l4-4 3 3 5-7"/></svg>
+    </a>
+    {% endif %}
+    {% if csrf_token %}<a class="icon-action" href="/targets?focus_target_id={{ target.id }}&amp;add_service={{ target.id }}#target-{{ target.id }}-service-create" title="Управление сервисами" aria-label="Добавить сервис объекту {{ target.name }}">+</a>{% endif %}
+    {% if show_snmp %}<a class="icon-action" href="/targets/{{ target.id }}/snmp" title="SNMP" aria-label="Открыть SNMP объекта {{ target.name }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1"></rect><rect x="4" y="14" width="16" height="6" rx="1"></rect><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"></path></svg>
+    </a>{% endif %}
+    {% if target.comment %}
+    <button class="icon-action comment-action" type="button" title="Комментарий" aria-label="Показать комментарий объекта {{ target.name }}" aria-expanded="false" data-help="{{ target.comment }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v10H9l-4 4V5Z"/></svg>
+    </button>
+    {% endif %}
+    {% if csrf_token %}
+    <form method="post" action="/checks/targets/{{ target.id }}/run-now" class="target-tool-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ return_to }}">
+      <button class="icon-action" type="submit" title="Проверить доступность сейчас" aria-label="Проверить объект {{ target.name }} сейчас">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 5v6h-6"/></svg>
+      </button>
+    </form>
+    {% endif %}
+  </div>
+  {% if target.notifications_suppressed %}<div class="target-tool-badges"><span class="badge badge-warning target-notification-badge">Без уведомлений</span></div>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}

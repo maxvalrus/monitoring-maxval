@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% from "_target_kind_icon.html" import target_kind_icon %}
+{% from "_wallboard_telemetry_icon.html" import wallboard_telemetry_icon %}
+{% block title %}Wallboard · Мониторинг Maxval{% endblock %}
+{% block body_class %}wallboard-page{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{{ url_for('static', path='/wallboard.css') }}?v={{ app_version }}&amp;r={{ static_asset_revision('wallboard.css') }}">{% endblock %}
+{% block content %}
+<section class="wallboard" data-wallboard>
+  <header class="wallboard-header">
+    <div class="wallboard-brand"><img src="{{ url_for('static', path='/favicon.svg') }}" alt=""><strong>Мониторинг Maxval</strong><small data-wallboard-freshness>Wallboard · {{ app_version }} · обновлено {{ display_datetime(now, '%H:%M:%S') }}</small></div>
+    <div class="wallboard-counts" aria-label="Сводка состояния объектов">
+      <button type="button" class="wallboard-count is-offline" data-wallboard-status-toggle data-wallboard-status="offline" data-wallboard-status-title="Offline" aria-expanded="false" aria-controls="wallboard-status-menu"><span>Offline</span><b>{{ counts.offline }}</b></button>
+      <button type="button" class="wallboard-count is-critical" data-wallboard-status-toggle data-wallboard-status="critical" data-wallboard-status-title="Critical" aria-expanded="false" aria-controls="wallboard-status-menu"><span>Critical</span><b>{{ counts.critical }}</b></button>
+      <button type="button" class="wallboard-count is-warning" data-wallboard-status-toggle data-wallboard-status="warning" data-wallboard-status-title="Warning" aria-expanded="false" aria-controls="wallboard-status-menu"><span>Warning</span><b>{{ counts.warning }}</b></button>
+      <button type="button" class="wallboard-count is-unknown" data-wallboard-status-toggle data-wallboard-status="unknown" data-wallboard-status-title="Нет данных" aria-expanded="false" aria-controls="wallboard-status-menu"><span>Нет данных</span><b>{{ counts.unknown }}</b></button>
+    </div>
+    <div class="wallboard-actions">
+      <time class="wallboard-server-clock" data-wallboard-server-clock title="Текущее время сервера" aria-label="Текущее время сервера"><span>ВРЕМЯ СЕРВЕРА</span><strong>{{ display_datetime(now, '%H:%M:%S') }}</strong></time>
+      <a class="icon-action" href="/" title="Вернуться в обычный режим" aria-label="Вернуться в обычный режим">←</a>
+      <button type="button" class="wallboard-control" data-wallboard-sites-menu-toggle aria-expanded="false" aria-controls="wallboard-sites-menu">Площадки</button>
+      <button type="button" class="wallboard-control" data-wallboard-rotation aria-pressed="false" title="Показывать выбранные площадки по одной каждые 15 секунд">Ротация</button>
+      <button type="button" class="icon-action" data-wallboard-fullscreen title="На весь экран" aria-label="На весь экран">⛶</button>
+      <button type="button" class="icon-action wallboard-actions-more" data-wallboard-actions-menu-toggle aria-expanded="false" aria-controls="wallboard-actions-menu" title="Дополнительные действия" aria-label="Дополнительные действия">⋯</button>
+    </div>
+  </header>
+
+  <section class="wallboard-telemetry wallboard-telemetry-{{ wallboard_portal['items']|length }}" aria-label="Состояние сервера портала">
+    <div class="telemetry-state tone-{{ wallboard_portal['state'] }}" title="{{ wallboard_portal['summary'] }}">
+      <span class="telemetry-state-icon">{{ wallboard_telemetry_icon('portal') }}</span>
+      <span class="telemetry-copy"><span class="telemetry-label">Сервер портала</span><span class="telemetry-value">{{ wallboard_portal['label'] }}</span></span>
+    </div>
+    {% for item in wallboard_portal['items'] %}
+    <div class="telemetry-item is-{{ item['tone'] }}{{ ' has-sparkline' if item.get('points') else '' }}"{% if item.get('meter') is not none %} style="--meter:{{ item['meter'] }}%"{% endif %}{% if item.get('title') %} title="{{ item['title'] }}"{% endif %}>
+      {{ wallboard_telemetry_icon(item['icon']) }}<span class="telemetry-copy"><span class="telemetry-label">{{ item['label'] }}</span>{% if item.get('network_rx') %}<span class="telemetry-value telemetry-network-value"><span>{{ item['network_rx'] }}</span><span>{{ item['network_tx'] }}</span></span>{% else %}<span class="telemetry-value">{{ item['value'] }}</span>{% endif %}</span>{% if item.get('points') %}<svg class="telemetry-sparkline" viewBox="0 0 320 74" preserveAspectRatio="none" role="img" aria-label="График: {{ item['label'] }}"><polyline points="{{ item['points'] }}"></polyline></svg>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+
+  <aside class="wallboard-sites-menu" id="wallboard-sites-menu" data-wallboard-sites-menu hidden>
+    <div class="wallboard-sites-menu-heading"><strong>Площадки для отображения</strong><button type="button" class="icon-action" data-wallboard-sites-menu-close aria-label="Закрыть выбор площадок" title="Закрыть">×</button></div>
+    <p>Выберите схемы для общей сетки или ротации.</p>
+    <div class="wallboard-sites-menu-list">
+      {% for site in sites %}
+      <button type="button" class="wallboard-site-option" data-wallboard-site-toggle data-wallboard-site-id="{{ site.id }}" aria-pressed="true">
+        <span class="wallboard-site-option-preview">{% for target in site.targets if target.layout_x is not none and target.layout_y is not none %}{% set item_health = health[target.id] %}<i class="state-{{ item_health.state }}" data-wallboard-preview-target data-layout-x="{{ target.layout_x }}" data-layout-y="{{ target.layout_y }}"></i>{% endfor %}</span>
+        <span><strong>{{ site.name }}</strong><small>{{ site.targets|length }} объектов</small></span><b aria-hidden="true">✓</b>
+      </button>
+      {% endfor %}
+    </div>
+  </aside>
+  <aside class="wallboard-actions-menu" id="wallboard-actions-menu" data-wallboard-actions-menu hidden>
+    {% if current_user.role == 'admin' and sites %}<a href="/sites/{{ sites[0].id }}/layout" data-wallboard-layout-link>Редактор схемы</a>{% endif %}
+    {% if current_user.role == 'admin' %}<form method="post" action="/checks/run-now"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="/wallboard"><button type="submit" data-wallboard-refresh-all title="Запустить внеочередную проверку всех активных объектов">↻ Обновить все объекты</button></form>{% endif %}
+    <button type="button" data-wallboard-tests-menu-toggle aria-expanded="false" aria-controls="wallboard-tests-menu">Тесты ›</button>
+    <div class="wallboard-tests-menu" id="wallboard-tests-menu" data-wallboard-tests-menu hidden>
+      <button type="button" data-wallboard-critical-test title="Показать тестовое критическое уведомление">⚠ Проверить оповещение</button>
+      <button type="button" data-wallboard-critical-burst-test title="Показать десять тестовых критических уведомлений">⚠ Проверить массовое оповещение ×10</button>
+    </div>
+    <button type="button" data-wallboard-sites-size-reset>Сбросить размеры площадок</button>
+    <button type="button" data-wallboard-events-reset>Сбросить размеры окна событий</button>
+  </aside>
+
+  <div class="wallboard-layout"><main class="wallboard-sites" data-wallboard-sites>
+    {% for site in sites %}
+    <section class="wallboard-site is-{{ site.accent }}" data-wallboard-site="{{ site.id }}">
+      <header class="wallboard-site-heading" data-wallboard-site-drag title="Потяните заголовок, чтобы изменить положение площадки на TV-экране">
+        <div><h1>{{ site.name }}</h1></div>
+        <div class="wallboard-site-summary" aria-label="Сводка состояния площадки {{ site.name }}"><span class="is-ok" title="Доступны">● {{ site.health_counts.ok }}</span><span class="is-warning" title="Warning">▲ {{ site.health_counts.warning }}</span><span class="is-danger" title="Offline или Critical">● {{ site.health_counts.offline + site.health_counts.critical + site.health_counts.site_unreachable }}</span><span class="is-disabled" title="Отключены">○ {{ site.health_counts.disabled }}</span></div>
+        <div class="wallboard-site-actions">
+          <button type="button" class="wallboard-site-focus" data-wallboard-site-focus data-wallboard-site-id="{{ site.id }}" aria-pressed="false" title="Развернуть площадку на весь экран" aria-label="Развернуть площадку {{ site.name }} на весь экран">⛶</button>
+          <button type="button" class="wallboard-site-center" data-wallboard-site-center data-wallboard-site-id="{{ site.id }}" title="Центрировать объекты площадки {{ site.name }}" aria-label="Центрировать объекты площадки {{ site.name }}">◎</button>
+          {% if current_user.role == 'admin' %}
+          <div class="wallboard-site-scale-control"><button type="button" data-wallboard-site-scale-toggle data-wallboard-site-id="{{ site.id }}" aria-expanded="false" title="Показать масштаб объектов площадки {{ site.name }}">100%</button><label class="wallboard-site-scale" data-wallboard-site-scale-panel title="Масштаб объектов площадки {{ site.name }}" hidden><input type="range" min="10" max="200" step="10" value="100" data-wallboard-site-scale data-wallboard-site-id="{{ site.id }}" aria-label="Дополнительный масштаб объектов площадки {{ site.name }} на TV-экране"><output data-wallboard-site-scale-value>100%</output></label></div>
+          {% endif %}
+          {% if current_user.role == 'admin' %}
+          <a class="wallboard-site-layout-link wallboard-site-edit-link" href="/sites/{{ site.id }}/layout" title="Открыть редактор схемы площадки {{ site.name }}" aria-label="Открыть редактор схемы площадки {{ site.name }}">⋯</a>
+          {% endif %}
+        </div>
+      </header>
+      <div class="wallboard-site-content">
+        <div class="wallboard-canvas">
+          {% for target in site.targets if target.layout_x is not none and target.layout_y is not none %}
+          {% set item_health = health[target.id] %}
+          <button type="button" class="wallboard-target state-{{ item_health.state }}" data-wallboard-target data-target-id="{{ target.id }}" data-layout-x="{{ target.layout_x }}" data-layout-y="{{ target.layout_y }}" data-layout-scale="{{ site.layout_scale / 100 }}" style="left:{{ target.layout_x / 100 }}%;top:{{ target.layout_y / 100 }}%" data-target-name="{{ target.name }}" data-target-detail="{{ target.site_name }} · {{ target.address }}{% if target.checker_type != 'icmp' %}:{{ target.port }}{% endif %} · {{ item_health.reason }}" data-target-health='{{ target.health|tojson }}' data-target-services='{{ target.service_details|tojson }}'><span class="wallboard-target-icon">{{ target_kind_icon(target.kind) }}</span><span class="wallboard-target-name">{{ target.name }}</span>{% if target.services %}<span class="wallboard-target-services" aria-label="Дополнительные сервисы объекта {{ target.name }}">{% for service in target.services %}<i class="state-{{ service.status }}" role="img" title="{{ service.name }} · {{ service.checker_type|upper }} · {{ service.label }}" aria-label="{{ service.name }}: {{ service.label }}"></i>{% endfor %}</span>{% endif %}{% if item_health.state != 'ok' %}<em class="wallboard-target-state">{{ item_health.label }}</em>{% endif %}{% if target.open_incident_count %}<b>{{ target.open_incident_count }}</b>{% endif %}</button>
+          {% endfor %}
+          <p class="wallboard-no-layout" {% if site.targets|rejectattr('layout_x', 'none')|rejectattr('layout_y', 'none')|list %}hidden{% endif %}>Разместите объекты площадки через редактор схемы.</p>
+          <div class="wallboard-site-stamp" aria-hidden="true"><span>SITE // {{ site.name }}</span><span>{{ site.targets|length }} OBJECTS · {{ site.problems }} ALERTS</span></div>
+        </div>
+      </div>
+      <span class="wallboard-site-resize" data-wallboard-site-resize role="separator" aria-label="Изменить размер площадки {{ site.name }}" title="Потяните, чтобы изменить размер площадки"></span>
+    </section>
+    {% endfor %}
+  </main></div>
+
+  <aside class="wallboard-events" data-wallboard-events aria-label="Последние события">
+    <header data-wallboard-events-drag title="Перетащите окно за заголовок"><div class="wallboard-events-title"><strong>EVENT STREAM // LAST HOUR</strong></div><label class="wallboard-events-font" title="Размер шрифта журнала"><input type="range" min="50" max="200" step="10" value="100" data-wallboard-events-font aria-label="Размер шрифта журнала событий"></label><button type="button" class="wallboard-events-collapse" data-wallboard-events-collapse title="Свернуть в одну строку" aria-label="Свернуть окно событий" aria-expanded="true">−</button><button type="button" class="wallboard-events-close" data-wallboard-events-close title="Закрыть окно событий" aria-label="Закрыть окно событий">×</button></header>
+    <div>{% for event in events %}<span class="{{ 'is-recovery' if event.resolved else 'is-failure' }}"><i aria-hidden="true">{{ '✓' if event.resolved else '!' }}</i><span>{{ display_datetime(event.at, '%H:%M') }} · {{ event.kind }} · {{ event.site }} · {{ event.target }} — {{ event.message }}</span></span>{% else %}<span class="wallboard-event-empty"><i aria-hidden="true">·</i><span>За последний час событий нет.</span></span>{% endfor %}</div>
+  </aside>
+</section>
+<div class="wallboard-detail" data-wallboard-detail hidden><div><button type="button" class="icon-action" data-wallboard-detail-close aria-label="Закрыть">×</button><h2 data-wallboard-detail-title></h2><p data-wallboard-detail-text></p><section class="wallboard-detail-health" aria-label="Здоровье объекта"><span>Здоровье объекта</span><b data-wallboard-detail-health-status></b><small data-wallboard-detail-health-reason></small></section><section class="wallboard-detail-services" aria-labelledby="wallboard-detail-services-title"><h3 id="wallboard-detail-services-title">Проверки и сервисы</h3><ul data-wallboard-detail-services></ul><p class="muted" data-wallboard-detail-services-empty hidden>Дополнительные сервисы не настроены.</p></section></div></div>
+<div class="wallboard-status-menu" id="wallboard-status-menu" data-wallboard-status-dialog hidden role="menu" aria-labelledby="wallboard-status-title"><div><button type="button" class="icon-action" data-wallboard-status-close aria-label="Закрыть">×</button><h2 id="wallboard-status-title" data-wallboard-status-title></h2>{% for status in ('offline', 'critical', 'warning', 'unknown') %}<div data-wallboard-status-list="{{ status }}" hidden>{% for target in status_targets[status] %}{% set item_health = health[target.id] %}<p>{{ target.site_name }} · {{ target.name }} — {{ item_health.reason }}</p>{% else %}<p class="muted">Объектов с таким состоянием нет.</p>{% endfor %}</div>{% endfor %}</div></div>
+<div class="wallboard-critical-alert" data-critical-alert data-critical-source="/wallboard" data-critical-storage-key="monitoring-wallboard-critical-alerted" hidden role="alertdialog" aria-modal="true" aria-label="Критические уведомления">
+  <div class="wallboard-critical-alert-grid" data-critical-alert-grid></div>
+  <div class="wallboard-critical-alert-timer" aria-hidden="true"><i></i></div>
+</div>
+<div data-critical-sources hidden>{% for target in status_targets['critical'] %}{% set item_health = health[target.id] %}<i data-critical-target data-target-id="{{ target.id }}" data-target-name="{{ target.name }}" data-target-description="{{ target.site_name }} · {{ target.address }}{% if target.checker_type != 'icmp' %}:{{ target.port }}{% endif %} · {{ item_health.reason }}"></i>{% endfor %}</div>
+{% endblock %}

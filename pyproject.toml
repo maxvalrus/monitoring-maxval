@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools==75.8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "monitoring-maxval"
+dynamic = ["version"]
+description = "Compact infrastructure availability monitoring"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic==1.19.1",
+    "argon2-cffi==25.1.0",
+    "cryptography==46.0.7",
+    "fastapi==0.141.1",
+    "httpx==0.28.1",
+    "icmplib==3.0.4",
+    "jinja2==3.1.6",
+    "psycopg[binary]==3.3.4",
+    "pydantic-settings==2.15.0",
+    "pysnmp==7.1.29",
+    "python-multipart==0.0.32",
+    "pywebpush==2.3.0",
+    "reportlab==4.5.1",
+    "sqlalchemy==2.0.52",
+    "smbprotocol==1.17.0",
+    "tzdata==2026.3",
+    "uvicorn[standard]==0.52.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx2==2.12.0",
+    "pytest>=8,<10",
+    "ruff>=0.8,<1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+monitoring = ["templates/*.html", "static/*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "monitoring.__version__"}
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]

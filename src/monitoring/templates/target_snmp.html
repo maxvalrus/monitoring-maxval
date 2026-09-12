@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% from "_sortable_header.html" import sortable_header %}
+{% block title %}{{ target.name }} · SNMP{% endblock %}
+{% block content %}
+<div class="snmp-page">
+  <section class="page-heading snmp-heading">
+    <div class="snmp-heading-copy">
+      <p class="eyebrow">Телеметрия объекта</p>
+      <div class="snmp-title-row"><span class="snmp-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="6" rx="1"></rect><rect x="4" y="14" width="16" height="6" rx="1"></rect><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"></path></svg></span><h1>SNMP · {{ target.name }}</h1></div>
+      <p class="muted snmp-heading-description">{{ target.site.name }} · {{ target.address }}. SNMP не влияет на основной статус доступности объекта.</p>
+    </div>
+    <div class="page-heading-actions snmp-heading-actions">
+      <div class="snmp-header-icon-actions">
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/thresholds" title="Пороги" aria-label="Пороги"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M11 16v4"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/supplies" title="Расходники" aria-label="Расходники"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V4h10v4M7 17h10v3H7z"></path><rect x="4" y="8" width="16" height="9" rx="2"></rect><path d="M8 12h.01"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/ups" title="ИБП" aria-label="ИБП"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect><path d="M12 8v5M10 13h4M8 19v2M16 19v2"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/interfaces" title="Интерфейсы" aria-label="Интерфейсы"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="6" height="6" rx="1"></rect><rect x="15" y="14" width="6" height="6" rx="1"></rect><path d="M9 7h3a3 3 0 0 1 3 3v4M9 17h3a3 3 0 0 0 3-3"></path></svg></a>
+        {% if current_user.role == 'admin' %}<a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/discovery" title="OID Discovery" aria-label="OID Discovery"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="5"></circle><path d="m14 14 6 6M8 10h4M10 8v4"></path></svg></a>{% endif %}
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/history" title="История доступности" aria-label="История доступности"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg></a>
+      </div>
+    </div>
+  </section>
+
+  {% set current_offline = latest_target_status != 'up' %}
+  <section class="panel snmp-map-panel" aria-labelledby="snmp-map-title">
+    <div class="panel-heading"><h2 id="snmp-map-title">Карта SNMP</h2><p class="muted">Начните с настройки, затем соберите данные и используйте их для контроля.</p></div>
+    <div class="snmp-map-grid">
+      {% if current_user.role == 'admin' %}<a class="snmp-map-card is-current" href="#snmp-settings" data-navigation-focus="snmp-settings">
+      {% else %}<article class="snmp-map-card is-current">
+      {% endif %}
+        <div class="snmp-map-card-heading"><span class="snmp-map-step">1</span><span class="snmp-map-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="6" rx="1"></rect><rect x="4" y="14" width="16" height="6" rx="1"></rect><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"></path></svg></span><strong>Настройка SNMP</strong></div>
+        <p>Выберите SNMP v1 или v2c, укажите Community и проверьте связь с устройством.</p>
+        <span class="badge {{ 'badge-success' if config and config.enabled else 'badge-danger' }}">{{ 'Включён' if config and config.enabled else 'Не включён' }}</span>
+      {% if current_user.role == 'admin' %}</a>{% else %}</article>{% endif %}
+      {% if current_user.role == 'admin' %}
+      <a class="snmp-map-card" href="/targets/{{ target.id }}/snmp/discovery">
+        <span class="snmp-map-card-heading"><span class="snmp-map-step">2</span><span class="snmp-map-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="5"></circle><path d="m14 14 6 6M8 10h4M10 8v4"></path></svg></span><strong>OID Discovery</strong></span>
+        <p>Находит доступные OID. Они не станут метриками, пока вы не добавите их вручную.</p>
+        <span class="snmp-map-status">{{ 'Можно сканировать' if config and config.enabled else 'Сначала включите SNMP' }}</span>
+      </a>
+      {% else %}
+      <article class="snmp-map-card is-disabled">
+        <div class="snmp-map-card-heading"><span class="snmp-map-step">2</span><span class="snmp-map-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="5"></circle><path d="m14 14 6 6M8 10h4M10 8v4"></path></svg></span><strong>OID Discovery</strong></div>
+        <p>Находит доступные OID. Управление Discovery доступно администратору.</p>
+        <span class="snmp-map-status">Только Admin</span>
+      </article>
+      {% endif %}
+      <a class="snmp-map-card" href="/targets/{{ target.id }}/snmp/interfaces">
+        <span class="snmp-map-card-heading"><span class="snmp-map-step">2</span><span class="snmp-map-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="6" height="6" rx="1"></rect><rect x="15" y="14" width="6" height="6" rx="1"></rect><path d="M9 7h3a3 3 0 0 1 3 3v4M9 17h3a3 3 0 0 0 3-3"></path></svg></span><strong>Интерфейсы</strong></span>
+        <p>Выберите порты, для которых нужны состояние, RX/TX, ошибки и отбросы.</p>
+        <span class="snmp-map-status">{{ monitored_interface_count ~ ' выбрано' if monitored_interface_count else 'Интерфейсы не выбраны' }}</span>
+      </a>
+      <a class="snmp-map-card" href="/targets/{{ target.id }}/snmp/supplies">
+        <span class="snmp-map-card-heading"><span class="snmp-map-step">2</span><span class="snmp-map-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 8V4h10v4M7 17h10v3H7z"></path><rect x="4" y="8" width="16" height="9" rx="2"></rect><path d="M8 12h.01"></path></svg></span><strong>Расходники</strong></span>
+        <p>Находит Printer-MIB и переводит уровень тонера, чернил и ёмкостей в безопасный процент.</p>
+        <span class="snmp-map-status">{{ supply_count ~ ' найдено' if supply_count else 'Расходники не обнаружены' }}</span>
+      </a>
+      <a class="snmp-map-card" href="/targets/{{ target.id }}/snmp/ups">
+        <span class="snmp-map-card-heading"><span class="snmp-map-step">2</span><span class="snmp-map-icon" aria-hidden="true">▣</span><strong>ИБП</strong></span>
+        <p>UPS-MIB: питание, батарея, автономность, нагрузка и напряжение.</p>
+        <span class="snmp-map-status">{{ 'Включён' if config and config.ups_enabled else 'Мониторинг ИБП выключен' }}</span>
+      </a>
+      <a class="snmp-map-card" href="/targets/{{ target.id }}/snmp/thresholds">
+        <span class="snmp-map-card-heading"><span class="snmp-map-step">3</span><span class="snmp-map-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M11 16v4"></path></svg></span><strong>Пороги</strong></span>
+        <p>Создают Warning/Critical-инциденты по числовым OID, интерфейсам или расходникам.</p>
+        <span class="snmp-map-status">{{ threshold_count ~ ' настроено' if threshold_count else 'Пороги не настроены' }}</span>
+      </a>
+      <a class="snmp-map-card" href="/targets/{{ target.id }}/history">
+        <span class="snmp-map-card-heading"><span class="snmp-map-step">3</span><span class="snmp-map-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg></span><strong>История</strong></span>
+        <p>Показывает накопленные numerical samples и графики SNMP-интерфейсов.</p>
+        <span class="snmp-map-status">{{ sample_total ~ ' samples' if sample_total else 'Данные ещё не накоплены' }}</span>
+      </a>
+    </div>
+    <p class="snmp-map-note muted">SNMP выполняется только после успешной основной проверки объекта и не меняет его статус доступности.</p>
+  </section>
+  <section class="panel snmp-status-panel">
+    <div class="panel-heading snmp-panel-heading">
+      <h2>Статус SNMP</h2>
+      <span class="badge {{ 'badge-success' if config and config.enabled else 'badge-danger' }}">{{ 'Включён' if config and config.enabled else 'Выключен' }}</span>
+    </div>
+    {% if current_offline %}<div class="alert alert-warning">SNMP сейчас не опрашивается: основная проверка объекта неуспешна. Последние SNMP-данные и история сохранены.</div>{% endif %}
+    <dl class="target-current-settings-grid snmp-status-grid">
+      <div><dt>Последний статус</dt><dd>{% if config %}<span class="badge {{ 'badge-success' if config.last_status == 'ok' else 'badge-danger' if config.last_status == 'error' else 'badge-warning' }}">{{ config.last_status }}</span>{% else %}never{% endif %}</dd></div>
+      <div><dt>Последний успешный polling</dt><dd>{{ display_datetime(config.last_success_at) if config and config.last_success_at else '—' }}</dd></div>
+      <div><dt>Ошибка</dt><dd>{{ config.last_error if config and config.last_error else '—' }}</dd></div>
+    </dl>
+  </section>
+
+  {% if current_user.role == 'admin' %}
+  <section id="snmp-settings" class="panel snmp-settings-panel">
+    <div class="panel-heading snmp-panel-heading">
+      <h2>Настройки</h2>
+      <span class="badge">SNMP {{ config.version if config else 'v2c' }}</span>
+    </div>
+    <form id="snmp-settings-form" method="post" action="/targets/{{ target.id }}/snmp/settings" class="form-grid compact-form snmp-settings-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="setting-toggle-control snmp-enable-control"><input type="checkbox" name="enabled" value="true" {{ 'checked' if config and config.enabled else '' }}><span><strong>Использовать SNMP</strong><small>Дополнительно получает системные данные и выбранные OID. На основной статус доступности объекта не влияет.</small></span></label>
+      <label class="setting-toggle-control snmp-enable-control"><input type="checkbox" name="ups_enabled" value="true" {{ 'checked' if config and config.ups_enabled else '' }}><span><strong>Мониторинг ИБП (UPS-MIB)</strong><small>Опрашивает только стандартный RFC 1628 после успешной основной проверки и SNMP.</small></span></label>
+      <label>Версия SNMP<select name="version"><option value="v2c" {{ 'selected' if not config or config.version == 'v2c' }}>SNMP v2c</option><option value="v1" {{ 'selected' if config and config.version == 'v1' }}>SNMP v1</option></select></label>
+      <label>Порт<input type="number" name="port" min="1" max="65535" value="{{ config.port if config else 161 }}" required></label>
+      <label><span class="field-label">Community <button class="help-trigger" type="button" aria-label="Описание Community" data-help="Community — это общая секретная строка для доступа к SNMP v1/v2c на устройстве. Она хранится в зашифрованном виде, не показывается обратно и не попадает в журналы. Оставьте поле пустым, чтобы сохранить текущую Community без изменений.">?</button></span><input type="password" name="community" maxlength="256" placeholder="{{ '••••••••' if config and config.community_encrypted else 'community' }}" autocomplete="new-password"></label>
+      <label>Timeout, сек.<input type="number" name="timeout_seconds" min="1" max="60" value="{{ config.timeout_seconds if config else 3 }}" required></label>
+      <label>Повторы<input type="number" name="retries" min="0" max="10" value="{{ config.retries if config else 1 }}" required></label>
+      <p class="form-field-full muted snmp-form-hint">Пустое поле Community оставляет сохранённое значение без изменений.</p>
+    </form>
+    <div class="snmp-actions">
+      <button class="button button-primary" type="submit" form="snmp-settings-form">Сохранить</button>
+      <form method="post" action="/targets/{{ target.id }}/snmp/test" class="snmp-test-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="button button-secondary" type="submit">Проверить SNMP</button>
+      </form>
+      <a class="button button-secondary" href="/targets/{{ target.id }}/snmp/discovery">Просканировать OID</a>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel snmp-device-panel">
+    <div class="panel-heading"><h2>Устройство</h2><p class="muted">Системные OID запрашиваются автоматически и не требуют добавления.</p></div>
+    <dl class="target-current-settings-grid snmp-device-grid">
+      <div><dt>sysName</dt><dd>{{ config.sys_name if config and config.sys_name else '—' }}</dd></div>
+      <div><dt>sysObjectID</dt><dd><code>{{ config.sys_object_id if config and config.sys_object_id else '—' }}</code></dd></div>
+      <div><dt>sysDescr</dt><dd>{{ config.sys_descr if config and config.sys_descr else '—' }}</dd></div>
+      <div><dt>sysUpTime</dt><dd>{% if config and config.sys_uptime_ticks is not none %}{{ config.sys_uptime_ticks }} ticks · {{ format_duration((config.sys_uptime_ticks / 100)|int) }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Время данных</dt><dd>{{ display_datetime(config.system_data_at) if config and config.system_data_at else '—' }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="panel snmp-metrics-panel" aria-labelledby="snmp-metrics-title">
+    <div class="panel-heading"><h2 id="snmp-metrics-title">Метрики</h2><p class="muted">Максимум 32 ручных метрики на объект. OID и формулы получают историю только для числового результата.</p></div>
+    {% if metric_form_error %}<div class="alert alert-error snmp-metric-form-error">{{ metric_form_error }}</div>{% endif %}
+    {% if current_user.role == 'admin' %}
+    <div class="snmp-metric-create-grid">
+      <form method="post" action="/targets/{{ target.id }}/snmp/metrics" class="panel snmp-metric-create-card">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="snmp-metric-create-heading"><h3>Добавить OID</h3><p class="muted">Добавьте новую метрику на основе OID.</p></div>
+        <div class="snmp-metric-create-fields">
+          <label>Название<input name="name" value="{{ metric_form_draft.name if metric_form_draft and metric_form_draft.source_kind == 'oid' else '' }}" maxlength="160" required></label>
+          <label>OID<input name="oid" value="{{ metric_form_draft.oid if metric_form_draft and metric_form_draft.source_kind == 'oid' else '' }}" maxlength="255" placeholder="1.3.6.1.2.1…" required></label>
+          <label>Единица<input name="unit" value="{{ metric_form_draft.unit if metric_form_draft and metric_form_draft.source_kind == 'oid' else '' }}" maxlength="80"></label>
+        </div>
+        <div class="snmp-metric-create-footer"><div><label class="checkbox-label snmp-checkbox-control"><input type="checkbox" name="enabled" value="true" {{ 'checked' if not metric_form_draft or metric_form_draft.source_kind != 'oid' or metric_form_draft.enabled else '' }}> Включён</label><small class="muted">Метрика будет собираться при следующем опросе.</small></div><button class="button" type="submit">Добавить OID</button></div>
+      </form>
+      <form method="post" action="/targets/{{ target.id }}/snmp/metrics" class="panel snmp-metric-create-card">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="source_kind" value="formula">
+        <div class="snmp-metric-create-heading"><h3>Добавить формулу</h3><p class="muted">Создайте метрику на основе формулы из исходных OID.</p></div>
+        <div class="snmp-metric-create-fields">
+          <label>Название<input name="name" value="{{ metric_form_draft.name if metric_form_draft and metric_form_draft.source_kind == 'formula' else '' }}" maxlength="160" required></label>
+          <label><span class="field-label">Формула <button class="help-trigger" type="button" aria-label="Справка по формуле SNMP" data-help-wide data-help="Формульная метрика показывает один рассчитанный показатель. Исходные OID читаются в том же пакетном SNMP GET, но не появляются отдельными строками и не создают собственную историю.&#10;&#10;Базовая запись: oid(&quot;1.3.6.1.2.1…&quot;). В кавычках указывается полный числовой OID. Разрешены +, -, *, /, скобки, min(), max(), abs(), round(значение, знаки), а также константы KiB, MiB и GiB. Можно использовать до 16 разных OID в одной формуле.&#10;&#10;Память Windows / HOST-RESOURCES-MIB&#10;Не нужно вручную учитывать блоки hrStorageAllocationUnits. Укажите номер нужного hrStorage:&#10;round(hr_storage_free_bytes(1) / MiB, 1) — свободная память в MiB.&#10;hr_storage_free_percent(1) — свободная память в процентах.&#10;hr_storage_total_bytes(1) / GiB — общий размер в GiB.&#10;hr_storage_used_bytes(1) / MiB — занято в MiB.&#10;Эти функции сами читают allocation unit, total и used, переводят их в байты и сохраняют только итоговый показатель. Номер hrStorage возьмите из OID Discovery или документации устройства.&#10;&#10;Общий пример: round((oid(&quot;1.3.6.1.2.1.25.2.3.1.5.1&quot;) - oid(&quot;1.3.6.1.2.1.25.2.3.1.6.1&quot;)) / 1024, 1).&#10;&#10;Результат должен быть числом. Если один исходный OID временно не вернул число, ошибка появится только у этой метрики; SNMP и остальные метрики продолжат работать. Формулы не могут ссылаться на другие сохранённые метрики.">?</button></span><input name="formula" value="{{ metric_form_draft.formula if metric_form_draft and metric_form_draft.source_kind == 'formula' else '' }}" maxlength="2000" placeholder='round(hr_storage_free_bytes(1) / MiB, 1)' required></label>
+          <label>Единица<input name="unit" value="{{ metric_form_draft.unit if metric_form_draft and metric_form_draft.source_kind == 'formula' else '' }}" maxlength="80" placeholder="MiB"></label>
+          <p class="muted snmp-form-hint">Формула читает исходные OID без создания скрытых метрик. Доступны <code>oid("1.3.6…")</code>, <code>KiB</code>, <code>MiB</code>, <code>GiB</code> и <code>hr_storage_free_bytes(индекс)</code>. Для Windows: <code>round(hr_storage_free_bytes(1) / MiB, 1)</code>.</p>
+        </div>
+        <div class="snmp-metric-create-footer"><label class="checkbox-label snmp-checkbox-control"><input type="checkbox" name="enabled" value="true" {{ 'checked' if not metric_form_draft or metric_form_draft.source_kind != 'formula' or metric_form_draft.enabled else '' }}> Включён</label><button class="button button-secondary" type="submit">Добавить формулу</button></div>
+      </form>
+    </div>
+    {% endif %}
+    <section class="snmp-metric-list">
+      <div class="panel-heading snmp-metric-list-heading"><div><h2>Список ручных метрик</h2><p class="muted">Здесь отображаются все добавленные вручную метрики.</p></div><div class="snmp-metric-list-actions"><span class="badge">Всего: {{ metrics|length }} из 32</span>{% if current_user.role == 'admin' %}<form method="post" action="/checks/targets/{{ target.id }}/run-now"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="/targets/{{ target.id }}/snmp"><button class="icon-action snmp-metric-poll-button" type="submit" title="Обновить ручные метрики" aria-label="Обновить ручные метрики" {{ 'disabled' if not config or not config.enabled else '' }}>↻</button></form>{% endif %}</div></div>
+      <div class="table-wrap entity-table-wrap"><table class="entity-table responsive-table snmp-metrics-table">
+      <thead><tr>{{ sortable_header(request, '№', 'display_order', metric_sort_state.column, metric_sort_state.direction, 'metric_sort', 'metric_direction') }}{{ sortable_header(request, 'Название', 'name', metric_sort_state.column, metric_sort_state.direction, 'metric_sort', 'metric_direction') }}{{ sortable_header(request, 'Источник', 'oid', metric_sort_state.column, metric_sort_state.direction, 'metric_sort', 'metric_direction') }}{{ sortable_header(request, 'Значение', 'last_value', metric_sort_state.column, metric_sort_state.direction, 'metric_sort', 'metric_direction') }}{{ sortable_header(request, 'Единица', 'unit', metric_sort_state.column, metric_sort_state.direction, 'metric_sort', 'metric_direction') }}{{ sortable_header(request, 'Тип', 'detected_type', metric_sort_state.column, metric_sort_state.direction, 'metric_sort', 'metric_direction') }}{{ sortable_header(request, 'Последний сбор', 'last_collected_at', metric_sort_state.column, metric_sort_state.direction, 'metric_sort', 'metric_direction') }}{{ sortable_header(request, 'Ошибка', 'last_error', metric_sort_state.column, metric_sort_state.direction, 'metric_sort', 'metric_direction') }}{% if current_user.role == 'admin' %}<th class="snmp-actions-column actions-header">Действия</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for metric in metrics %}
+        <tr>
+          <td class="snmp-order-column" data-label="Порядок">
+            <div class="snmp-metric-order-cell">
+              <span class="snmp-metric-order-value" title="Сохранённый порядок">{{ metric.display_order }}</span>
+              {% if current_user.role == 'admin' %}<div class="snmp-metric-order-controls">
+                <form method="post" action="/targets/{{ target.id }}/snmp/metrics/{{ metric.id }}/move"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="direction" value="up"><button class="order-button" type="submit" title="Поднять выше" aria-label="Поднять метрику {{ metric.name }} выше">↑</button></form>
+                <form method="post" action="/targets/{{ target.id }}/snmp/metrics/{{ metric.id }}/move"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="direction" value="down"><button class="order-button" type="submit" title="Опустить ниже" aria-label="Опустить метрику {{ metric.name }} ниже">↓</button></form>
+              </div>{% endif %}
+            </div>
+          </td>
+          <td data-label="Название"><strong>{{ metric.name }}</strong>{% if not metric.enabled %}<small class="muted"> · выключен</small>{% endif %}</td>
+          <td data-label="Источник"><div class="snmp-metric-source">{% if metric.source_kind == 'formula' %}<span class="badge">Формула</span><code title="{{ metric.formula }}">{{ metric.formula }}</code>{% else %}<span class="badge">OID</span><code title="{{ metric.oid }}">{{ metric.oid }}</code>{% endif %}</div></td>
+          <td data-label="Значение">{{ metric.last_value if metric.last_value is not none else '—' }}</td>
+          <td data-label="Единица">{{ metric.unit or '—' }}</td>
+          <td data-label="Тип">{{ metric.detected_type or '—' }}</td>
+          <td data-label="Последний сбор">{{ display_datetime(metric.last_collected_at) if metric.last_collected_at else '—' }}</td>
+          <td data-label="Ошибка">{{ metric.last_error or '—' }}</td>
+          {% if current_user.role == 'admin' %}<td class="snmp-actions-column" data-label="Действия"><div class="snmp-metric-row-actions"><button class="button button-secondary button-compact snmp-edit-button" type="button" data-table-editor-toggle="snmp-metric-editor-{{ metric.id }}" aria-controls="snmp-metric-editor-{{ metric.id }}" aria-expanded="false" title="Изменить метрику {{ metric.name }}" aria-label="Изменить метрику {{ metric.name }}">✎</button><form method="post" action="/targets/{{ target.id }}/snmp/metrics/{{ metric.id }}/delete" data-confirm="Удалить SNMP OID «{{ metric.name }}» вместе с его историей?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="icon-action snmp-delete-button" type="submit" title="Удалить метрику {{ metric.name }}" aria-label="Удалить метрику {{ metric.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"></path></svg></button></form></div></td>{% endif %}
+        </tr>
+        {% if current_user.role == 'admin' %}
+        <tr class="edit-row snmp-metric-edit-row">
+          <td colspan="{{ 9 if current_user.role == 'admin' else 8 }}">
+            <details id="snmp-metric-editor-{{ metric.id }}" class="table-editor"><summary class="snmp-editor-summary">Редактор метрики {{ metric.name }}</summary>
+              <form id="snmp-metric-{{ metric.id }}-form" method="post" action="/targets/{{ target.id }}/snmp/metrics/{{ metric.id }}" class="form-grid compact-form snmp-metric-edit-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <label>Название<input name="name" value="{{ metric.name }}" maxlength="160" required></label>
+                <input type="hidden" name="source_kind" value="{{ metric.source_kind }}">
+                {% if metric.source_kind == 'formula' %}<label class="form-field-wide">Формула<input name="formula" value="{{ metric.formula }}" maxlength="2000" required></label>{% else %}<label>OID<input name="oid" value="{{ metric.oid }}" maxlength="255" required></label>{% endif %}
+                <label>Единица<input name="unit" value="{{ metric.unit or '' }}" maxlength="80"></label>
+                <label class="checkbox-label snmp-checkbox-control"><input type="checkbox" name="enabled" value="true" {{ 'checked' if metric.enabled else '' }}> Включён</label>
+              </form>
+              <div class="table-actions snmp-metric-editor-actions">
+                <button class="button" type="submit" form="snmp-metric-{{ metric.id }}-form">Сохранить</button>
+              </div>
+            </details>
+          </td>
+        </tr>
+        {% endif %}
+        {% else %}
+        <tr><td colspan="{{ 9 if current_user.role == 'admin' else 8 }}" class="empty-state">Ручные метрики ещё не добавлены.</td></tr>
+        {% endfor %}
+      </tbody>
+      </table></div>
+    </section>
+  </section>
+
+  <section class="panel table-wrap entity-table-wrap snmp-samples-panel">
+    <div class="panel-heading snmp-samples-heading"><div><h2>SNMP data</h2><p class="muted">История числовых samples: хранится не более {{ snmp_sample_max_per_target }} последних записей объекта. Общий раздел «Графики» на этом этапе не изменяется.</p></div>{% if current_user.role == 'admin' %}<form method="post" action="/targets/{{ target.id }}/snmp/clear" data-confirm="Очистить все накопленные SNMP-данные объекта «{{ target.name }}»? Настройки и OID останутся."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="icon-action snmp-delete-button snmp-clear-data-button" type="submit" title="Очистить SNMP-данные" aria-label="Очистить SNMP-данные объекта {{ target.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"></path></svg></button></form>{% endif %}</div>
+    <table class="entity-table responsive-table snmp-samples-table">
+      <thead><tr>{{ sortable_header(request, 'Время', 'collected_at', sample_sort_state.column, sample_sort_state.direction, 'sample_sort', 'sample_direction') }}{{ sortable_header(request, 'Метрика', 'metric', sample_sort_state.column, sample_sort_state.direction, 'sample_sort', 'sample_direction') }}{{ sortable_header(request, 'Значение', 'value', sample_sort_state.column, sample_sort_state.direction, 'sample_sort', 'sample_direction') }}{{ sortable_header(request, 'Единица', 'unit', sample_sort_state.column, sample_sort_state.direction, 'sample_sort', 'sample_direction') }}</tr></thead>
+      <tbody>{% for sample, metric in samples %}<tr><td data-label="Время">{{ display_datetime(sample.collected_at) }}</td><td data-label="Метрика">{{ metric.name }}</td><td data-label="Значение">{{ format_metric_value(sample.value) }}</td><td data-label="Единица">{{ metric.unit or '—' }}</td></tr>{% else %}<tr><td colspan="4" class="empty-state">Числовая история пока отсутствует.</td></tr>{% endfor %}</tbody>
+    </table>
+    {{ pagination(request, sample_pager) }}
+  </section>
+
+</div>
+{% endblock %}

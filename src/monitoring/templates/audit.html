@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% from "_sortable_header.html" import sortable_header %}
+{% from "_section_icon.html" import section_icon %}
+{% block title %}Аудит · Мониторинг Maxval{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">Безопасность</p><div class="page-title-row">{{ section_icon('audit') }}<h1>Журнал действий</h1></div><p class="muted">События входа и административных изменений.</p></div></section>
+
+<form method="get" class="panel filter-bar" aria-label="Фильтры журнала аудита">
+  <div class="filter-panel-heading"><h2>Фильтр</h2></div>
+  <input type="hidden" name="per_page" value="{{ pager.per_page }}">
+  <input type="hidden" name="sort" value="{{ sort_state.column }}">
+  <input type="hidden" name="direction" value="{{ sort_state.direction }}">
+  <label class="grow">Поиск<input name="q" value="{{ filters.q }}" maxlength="100" placeholder="Действие, объект, IP или подробности"></label>
+  <label>Пользователь<select name="user_id"><option value="all">Все</option><option value="system" {{ 'selected' if filters.user_id == 'system' else '' }}>Система</option>{% for user in users %}<option value="{{ user.id }}" {{ 'selected' if filters.user_id == user.id|string else '' }}>{{ user.username }}</option>{% endfor %}</select></label>
+  <label>Действие<select name="action"><option value="">Все</option>{% for action in actions %}<option value="{{ action }}" {{ 'selected' if filters.action == action else '' }}>{{ action }}</option>{% endfor %}</select></label>
+  <label>Тип объекта<select name="entity_type"><option value="">Все</option>{% for entity_type in entity_types %}<option value="{{ entity_type }}" {{ 'selected' if filters.entity_type == entity_type else '' }}>{{ entity_type }}</option>{% endfor %}</select></label>
+  <div class="filter-actions">
+    <button class="button" type="submit">Применить</button>
+    <a class="button button-secondary" href="/audit?per_page={{ pager.per_page }}">Сбросить</a>
+  </div>
+</form>
+<div class="export-bar audit-export-bar" aria-label="Экспорт журнала аудита">
+  <span class="muted">Текущая выборка:</span>
+  <a class="button button-secondary" href="/audit/export/xlsx?scope=current&{{ audit_export_query }}">XLSX</a>
+  <a class="button button-secondary" href="/audit/export/json?scope=current&{{ audit_export_query }}">JSON</a>
+  <span class="export-separator" aria-hidden="true"></span>
+  <span class="muted">Весь журнал:</span>
+  <a class="button button-secondary" href="/audit/export/xlsx?scope=all">XLSX</a>
+  <a class="button button-secondary" href="/audit/export/json?scope=all">JSON</a>
+</div>
+<section class="panel table-wrap">
+  <table class="responsive-table audit-table">
+    <thead><tr>
+      {{ sortable_header(request, 'Время', 'created_at', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Пользователь', 'username', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Действие', 'action', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Объект', 'entity', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'IP', 'ip_address', sort_state.column, sort_state.direction) }}
+      {{ sortable_header(request, 'Подробности', 'details', sort_state.column, sort_state.direction) }}
+    </tr></thead>
+    <tbody>
+      {% for entry, username, detail_text, table_details in audit_rows %}
+      <tr class="audit-entry-row" tabindex="0" role="button" aria-label="Открыть расшифровку записи аудита" data-audit-details="{{ detail_text }}"><td data-label="Время">{{ display_datetime(entry.created_at) }}</td><td data-label="Пользователь">{{ username or 'система' }}</td><td data-label="Действие"><code>{{ entry.action }}</code></td><td data-label="Объект">{{ entry.entity_type or '' }}{% if entry.entity_id %}:{{ entry.entity_id }}{% endif %}</td><td data-label="IP">{{ entry.ip_address or '' }}</td><td class="details-cell" data-label="Подробности">{{ table_details }}</td></tr>
+      {% else %}<tr><td colspan="6">Событий пока нет.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{{ pagination(request, pager) }}
+{% endblock %}

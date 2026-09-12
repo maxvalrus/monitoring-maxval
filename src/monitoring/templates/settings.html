@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% from "_sortable_header.html" import sortable_header %}
+{% from "_section_icon.html" import section_icon %}
+{% block title %}Настройки · Мониторинг Maxval{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">Конфигурация</p><div class="page-title-row">{{ section_icon('settings') }}<h1>Ключевые настройки</h1></div><p class="muted">Наблюдатель видит значения, изменять их может только администратор.</p></div></section>
+
+<section class="panel settings-panel">
+  {% for item in settings_items %}
+  <div class="setting-row">
+    <div><div class="setting-title"><span class="setting-title-copy"><strong>{{ setting_labels.get(item.key, item.key) }}</strong><span class="setting-code-name">({{ item.key }})</span></span><button class="help-trigger" type="button" aria-label="Описание настройки" data-help="{{ setting_help.get(item.key, item.description or 'Описание отсутствует') }}">?</button></div><p>{{ item.description or '' }}</p></div>
+    {% if current_user.role == 'admin' %}
+    <form method="post" action="/settings" class="setting-form {{ 'timezone-setting-form' if item.key == 'display_timezone' else '' }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="key" value="{{ item.key }}">
+      {% if item.key == 'notifications_enabled' %}
+      <select name="value"><option value="false" {{ 'selected' if item.value == 'false' else '' }}>Выключено</option><option value="true" {{ 'selected' if item.value == 'true' else '' }}>Включено</option></select>
+      {% elif item.key == 'display_timezone' %}
+      <button class="button button-secondary timezone-detect-button" type="button" data-detect-timezone>Определить автоматически</button><input name="value" value="{{ item.value }}" maxlength="100" required placeholder="Europe/Moscow" data-timezone-input>
+      {% else %}
+      <input name="value" value="{{ item.value }}" inputmode="numeric" required>
+      {% endif %}
+      <button class="button" type="submit">Сохранить</button>
+    </form>
+    {% else %}<code>{{ item.value }}</code>{% endif %}
+  </div>
+  {% else %}<div class="empty-state"><p>Настройки не найдены. Проверьте инициализацию базы данных.</p></div>{% endfor %}
+</section>
+
+<section class="panel form-panel availability-thresholds-panel">
+  <div class="availability-thresholds-heading">
+    <div><p class="eyebrow">Отображение</p><h2>Пороги доступности за 24 часа</h2><p class="muted">Настройте цвет полосы доступности в таблице «Текущее состояние».</p></div>
+    <button class="help-trigger" type="button" aria-label="Справка о порогах доступности" data-help-wide data-help="Процент доступности рассчитывается по результатам основных проверок объекта за последние 24 часа.&#10;&#10;Красная зона — значение ниже жёлтого порога.&#10;Жёлтая зона — значение от жёлтого порога включительно до зелёного порога.&#10;Зелёная зона — значение от зелёного порога включительно.&#10;Если проверок за период не было, полоса остаётся серой.&#10;&#10;Текущий статус Online или Offline показывается отдельно и не подменяет статистику за 24 часа.">?</button>
+  </div>
+  {% if current_user.role == 'admin' %}
+  <form method="post" action="/settings/availability-thresholds" class="availability-thresholds-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label><span class="availability-zone-label is-warning"><i aria-hidden="true"></i>Жёлтая зона начинается с, %</span><input type="number" name="warning_threshold" min="0" max="99" value="{{ availability_warning_threshold }}" required></label>
+    <label><span class="availability-zone-label is-good"><i aria-hidden="true"></i>Зелёная зона начинается с, %</span><input type="number" name="good_threshold" min="1" max="100" value="{{ availability_good_threshold }}" required></label>
+    <button class="button" type="submit">Сохранить пороги</button>
+  </form>
+  {% else %}
+  <div class="availability-thresholds-values"><span>Жёлтая зона: с <strong>{{ availability_warning_threshold }}%</strong></span><span>Зелёная зона: с <strong>{{ availability_good_threshold }}%</strong></span></div>
+  {% endif %}
+</section>
+
+<section class="panel form-panel https-panel">
+  <div class="smtp-heading"><div class="smtp-title-group"><p class="eyebrow">Доступ</p><h2>HTTPS</h2><p class="muted">HTTP остаётся доступным. Сертификат и приватный ключ хранятся вне базы данных и не отображаются в интерфейсе.</p></div><span class="badge {{ 'badge-success' if https_enabled else 'badge-warning' }}">{{ 'включён' if https_enabled else 'выключен' }}</span></div>
+  {% if tls_status.active_expires_at %}<div class="tls-active-certificate {{ 'is-expiring' if not tls_status.active_redirect_safe else '' }}"><span>Активный сертификат действует до</span><strong>{{ tls_status.active_expires_at }}</strong></div>{% endif %}
+  {% if current_user.role == 'admin' %}
+  <form method="post" action="/settings/https/candidate" enctype="multipart/form-data" class="backup-upload-form backup-upload-grid" data-no-async>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="backup-file-field">Сертификат (PEM)<input type="file" name="certificate" accept=".pem,.crt,application/x-pem-file" required></label>
+    <label class="backup-file-field">Приватный ключ (PEM)<input type="file" name="private_key" accept=".pem,.key,application/x-pem-file" required></label>
+    <button class="button" type="submit">Проверить TLS-кандидат</button>
+  </form>
+  <form id="internal-ca-form" method="post" action="/settings/https/internal-ca" class="stack-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="setting-title internal-ca-title"><strong>Создать внутренний CA и TLS-кандидат</strong><button class="help-trigger" type="button" aria-label="Внутренний CA" data-help-wide data-help="Создаёт закрытый корневой CA и TLS-кандидат внутри TLS-manager. Приватные ключи не попадают в базу, интерфейс и журналы; скачать можно только публичный CA certificate.&#10;&#10;Общее имя (CN) — основное имя сертификата. Обычно это основной DNS-адрес портала.&#10;&#10;DNS SAN — все DNS-имена, по которым будет открываться портал, через запятую.&#10;&#10;IP SAN — все IP-адреса для прямого доступа, через запятую. При открытии портала по IP его адрес подставляется автоматически.&#10;&#10;После установки публичного CA в доверенные на устройствах активируйте кандидата обычной кнопкой HTTPS.">?</button></div>
+    <label><span class="field-label">Общее имя (CN) <button class="help-trigger" type="button" aria-label="Что такое CN" data-help="CN — основное имя выпускаемого серверного сертификата. Обычно укажите основной DNS-адрес портала, например monitoring.example.local. Современные браузеры проверяют SAN, поэтому CN не заменяет DNS SAN или IP SAN.">?</button></span><input name="common_name" value="{{ request.url.hostname or '' }}" required maxlength="253"></label>
+    <label><span class="field-label">DNS SAN через запятую <button class="help-trigger" type="button" aria-label="Что такое DNS SAN" data-help="DNS SAN — список DNS-имён, по которым пользователи будут открывать портал. Укажите все нужные имена через запятую: например monitoring.example.local, monitoring.example.ru. Если имя не указано в SAN, браузер покажет ошибку сертификата.">?</button></span><input name="dns_names" value="{{ request.url.hostname if request.url.hostname and ':' not in request.url.hostname else '' }}" placeholder="monitoring.example.local"></label>
+    <label><span class="field-label">IP SAN через запятую <button class="help-trigger" type="button" aria-label="Что такое IP SAN" data-help="IP SAN — список IP-адресов, по которым портал будет открываться напрямую. Укажите адрес сервера, например 192.168.1.10. При доступе по IP браузер сравнивает именно IP SAN: DNS SAN и CN для этого не подходят. Если вы открыли портал по IP, его адрес подставляется автоматически; при доступе по домену укажите LAN-IP сервера вручную.">?</button></span><input name="ip_addresses" value="{{ internal_ca_default_ip }}" placeholder="192.168.1.10"></label>
+  </form>
+  <div class="tls-ca-actions">
+    <form method="post" action="/settings/https/rollback" data-confirm="Восстановить последнюю рабочую TLS-конфигурацию и отключить HTTP → HTTPS redirect?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-danger" type="submit">Откатить к последней рабочей TLS-конфигурации</button></form>
+    <div class="tls-ca-primary-actions">
+      <button class="button button-secondary" type="submit" form="internal-ca-form">Создать внутренний TLS-кандидат</button>
+      <span class="ca-download-action">
+        <a class="button button-secondary" href="/settings/https/internal-ca/certificate">Скачать публичный CA</a>
+        <button class="help-trigger ca-download-help" type="button" aria-label="Инструкция установки внутреннего CA" data-help-wide data-help="Установка public CA&#10;&#10;iPhone / iPad&#10;1. Скачайте CA на устройство и откройте файл.&#10;2. Разрешите загрузку профиля.&#10;3. Откройте Настройки → Основные → VPN и управление устройством → загруженный профиль → Установить.&#10;4. Затем Настройки → Основные → Об этом устройстве → Доверие сертификатам и включите полное доверие для CA.&#10;&#10;Android&#10;1. Скачайте CA.&#10;2. Настройки → Безопасность и конфиденциальность → Дополнительные настройки безопасности → Установить сертификат → CA certificate.&#10;3. Подтвердите установку. Названия пунктов могут отличаться у производителя.&#10;&#10;Windows&#10;1. Откройте файл CA двойным щелчком.&#10;2. Установить сертификат → Локальный компьютер.&#10;3. Выберите «Поместить все сертификаты в следующее хранилище» → «Доверенные корневые центры сертификации».&#10;&#10;Linux&#10;Debian/Ubuntu: sudo install -m 644 monitoring-maxval-internal-ca.pem /usr/local/share/ca-certificates/monitoring-maxval.crt && sudo update-ca-certificates. Для других дистрибутивов импортируйте CA в системное хранилище.&#10;&#10;macOS&#10;1. Откройте Keychain Access → System.&#10;2. Импортируйте CA.&#10;3. Откройте сертификат и установите Trust → Always Trust.&#10;&#10;После установки полностью перезапустите браузер/PWA. Не устанавливайте CA на чужие или недоверенные устройства.">?</button>
+      </span>
+    </div>
+  </div>
+  <div class="tls-candidate-status {{ 'is-valid' if tls_status.candidate_valid else 'is-invalid' if tls_status.candidate_message else 'is-empty' }}" role="status">
+    <div class="tls-candidate-status-copy">
+      <span class="badge {{ 'badge-success' if tls_status.candidate_valid else 'badge-danger' if tls_status.candidate_message else 'badge-warning' }}">{{ 'готов к активации' if tls_status.candidate_valid else 'не принят' if tls_status.candidate_message else 'ожидает загрузки' }}</span>
+      <span>{% if tls_status.candidate_valid %}{{ tls_status.candidate_message }}{% elif tls_status.candidate_message %}Последний кандидат не принят: {{ tls_status.candidate_message }}{% else %}Сначала загрузите сертификат и соответствующий приватный ключ.{% endif %}</span>
+    </div>
+    <button class="help-trigger" type="button" aria-label="Что означает статус TLS-кандидата" data-help="TLS-кандидат — загруженная пара certificate и private key. До активации система проверяет формат, срок действия, соответствие ключа сертификату и конфигурацию Caddy. Проверенный кандидат ещё не изменяет работающий HTTPS: он станет активным только после нажатия «Применить HTTPS».">?</button>
+  </div>
+  <form method="post" action="/settings/https" class="stack-form tls-controls-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="tls-control tls-enable-control"><input type="checkbox" name="https_enabled" value="true" {{ 'checked' if https_enabled else '' }}><span><strong>Включить HTTPS</strong><small>Открывает защищённый доступ к порталу. Прямой HTTP остаётся доступным.</small></span></label>
+    <label class="tls-control tls-redirect-control {{ 'is-disabled' if not (https_enabled and tls_status.active_valid and tls_status.active_redirect_safe) else '' }}"><input type="checkbox" name="https_redirect_http" value="true" {{ 'checked' if https_redirect_http else '' }} {{ 'disabled' if not (https_enabled and tls_status.active_valid and tls_status.active_redirect_safe) else '' }}><span><strong>Перенаправлять HTTP → HTTPS</strong><small>Переводит HTTP-запросы на HTTPS временным redirect 307. HSTS не применяется.</small></span></label>
+    {% if https_enabled and tls_status.active_valid and not tls_status.active_redirect_safe %}<p class="alert alert-warning">Сертификат истекает в течение двух суток. HTTP → HTTPS перенаправление недоступно; прямой HTTP сохранён для безопасной замены сертификата.</p>{% endif %}
+    <div class="form-actions"><button class="button button-primary" type="submit">Применить HTTPS</button></div>
+  </form>
+  <form method="post" action="/settings/https/warnings" class="tls-warning-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="tls-warning-copy">
+      <label class="checkbox-label"><input type="checkbox" name="enabled" value="true" {{ 'checked' if tls_warning_enabled else '' }}> Предупреждать об окончании сертификата</label>
+      <p>Уведомление придёт администраторам, если активный сертификат приближается к окончанию срока действия.</p>
+    </div>
+    <label class="tls-warning-days"><span>Предупреждать за</span><span class="tls-warning-days-control"><input name="days" type="number" min="1" max="365" value="{{ tls_warning_days }}"><span>дней</span></span></label>
+    <button class="button button-secondary" type="submit">Сохранить</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="panel form-panel smtp-panel">
+  <div class="smtp-heading">
+    <div class="smtp-title-group">
+      <p class="eyebrow">Уведомления</p>
+      <h2>Настройки SMTP</h2>
+      <p class="muted">Пароль хранится в базе в зашифрованном виде и никогда не выводится обратно.</p>
+    </div>
+    <span class="badge {{ 'badge-success' if email_config.configured else 'badge-danger' }}">{{ 'настроено' if email_config.configured else 'не настроено' }}</span>
+  </div>
+
+  {% if current_user.role == 'admin' %}
+  <form id="smtp-settings-form" method="post" action="/settings/smtp" class="stack-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="setting-toggle-control smtp-enable-control"><input type="checkbox" name="smtp_enabled" value="true" {{ 'checked' if email_config.enabled else '' }}><span><strong>Использовать SMTP</strong><small>Автоматические письма отправляются, только когда также включён общий переключатель «Уведомления».</small></span><button class="help-trigger" type="button" aria-label="Описание включения SMTP" data-help="{{ smtp_help.enabled }}">?</button></label>
+    <div class="smtp-grid">
+      <label><span class="field-label">SMTP-сервер <button class="help-trigger" type="button" aria-label="Описание SMTP-сервера" data-help="{{ smtp_help.host }}">?</button></span><input name="smtp_host" value="{{ email_config.host }}" maxlength="255" placeholder="smtp.example.ru"></label>
+      <label><span class="field-label">Порт <button class="help-trigger" type="button" aria-label="Описание SMTP-порта" data-help="{{ smtp_help.port }}">?</button></span><input type="number" name="smtp_port" value="{{ email_config.port }}" min="1" max="65535" required></label>
+      <label><span class="field-label">Логин <button class="help-trigger" type="button" aria-label="Описание SMTP-логина" data-help="{{ smtp_help.username }}">?</button></span><input name="smtp_username" value="{{ email_config.username }}" maxlength="255" autocomplete="off"></label>
+      <label><span class="field-label">Пароль <button class="help-trigger" type="button" aria-label="Описание SMTP-пароля" data-help="{{ smtp_help.password }}">?</button></span><input type="password" name="smtp_password" value="" maxlength="256" autocomplete="new-password" placeholder="{{ 'Сохранён · оставьте пустым без изменений' if email_config.password_configured else 'Введите пароль при необходимости' }}"></label>
+      <label><span class="field-label">Отправитель <button class="help-trigger" type="button" aria-label="Описание отправителя" data-help="{{ smtp_help.sender }}">?</button></span><input type="email" name="smtp_sender" value="{{ email_config.sender }}" maxlength="255" placeholder="monitoring@example.ru"></label>
+      <label><span class="field-label">Получатели <button class="help-trigger" type="button" aria-label="Описание получателей" data-help="{{ smtp_help.recipient }}">?</button></span><textarea name="smtp_recipient" rows="3" maxlength="500" placeholder="admin@example.ru, duty@example.ru">{{ email_config.recipient }}</textarea></label>
+    </div>
+    <div class="smtp-options">
+      <label class="push-option smtp-option"><input type="checkbox" name="smtp_starttls" value="true" {{ 'checked' if email_config.starttls else '' }}><span>Использовать STARTTLS (обычно порт 587)</span><button class="help-trigger" type="button" aria-label="Описание STARTTLS" data-help="{{ smtp_help.starttls }}">?</button></label>
+      {% if email_config.password_configured %}<label class="push-option smtp-option"><input type="checkbox" name="clear_password" value="true"><span>Очистить сохранённый пароль</span></label>{% endif %}
+    </div>
+    <p class="smtp-hint muted">Проверенная конфигурация: порт 587 и включённый STARTTLS. Пустое поле пароля сохраняет уже записанный пароль. Несколько получателей разделяются запятой, точкой с запятой или новой строкой.</p>
+  </form>
+  <div class="smtp-actions">
+    <button class="button" type="submit" form="smtp-settings-form">Сохранить SMTP</button>
+    <form method="post" action="/settings/test-email" class="smtp-test-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="button button-primary" type="submit" {{ 'disabled' if not email_config.configured else '' }}>Отправить тестовое письмо</button>
+    </form>
+  </div>
+  </div>
+  {% else %}
+    {% if email_config.configured %}
+      <p class="muted">{{ email_config.host }}:{{ email_config.port }} · {{ email_config.sender }} → {{ email_config.recipient }} · STARTTLS: {{ 'да' if email_config.starttls else 'нет' }}</p>
+    {% else %}
+      <p class="muted">Почтовый канал ещё не настроен администратором.</p>
+    {% endif %}
+  {% endif %}
+</section>
+
+<section class="panel push-settings-panel settings-push-panel">
+  <div><p class="eyebrow">Уведомления</p><h2>PWA Push</h2><p class="muted">Push-уведомления на этом устройстве. Для iPhone/iPad установите Monitoring Maxval на домашний экран и открывайте его как PWA. Web Push требует HTTPS и работает, когда глобальная настройка «Уведомления» включена.</p></div>
+  <div class="push-device-row"><div><strong data-push-state>Проверяем состояние Push…</strong><p class="muted">Подписок пользователя в базе: {{ push_subscriptions }}</p></div><div class="push-device-actions"><button class="button" type="button" data-push-enable>Включить Push</button><button class="button" type="button" data-push-disable hidden>Отключить на этом устройстве</button></div></div>
+  <form class="push-preferences-form" method="post" action="/notifications/preferences">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="push-option"><input type="checkbox" name="push_chat" value="true" {% if current_user.push_chat_enabled %}checked{% endif %}><span>Новые сообщения чата</span></label>
+    <label class="push-option"><input type="checkbox" name="push_incident" value="true" {% if current_user.push_incident_enabled %}checked{% endif %}><span>Новые инциденты</span></label>
+    <label class="push-option"><input type="checkbox" name="push_recovery" value="true" {% if current_user.push_recovery_enabled %}checked{% endif %}><span>Восстановление объектов</span></label>
+    <div class="form-actions"><button class="button" type="submit">Сохранить настройки Push</button></div>
+  </form>
+  {% if current_user.role == 'admin' %}
+  <div class="push-subscriptions-section">
+    <div class="push-subscriptions-heading">
+      <div>
+        <h3>Подписки устройств</h3>
+        <p class="muted">Здесь показаны все сохранённые подписки. Endpoint и ключи браузера не отображаются. Чтобы изменить подписку устройства, отключите и включите Push на самом устройстве.</p>
+      </div>
+      <button class="help-trigger" type="button" aria-label="Управление Push-подписками" data-help="Тестовый Push отправляется только на выбранное устройство и не зависит от общих уведомлений или категорий пользователя. Удаление отключает доставку на это устройство; включить её снова можно только в браузере или PWA самого пользователя.">?</button>
+    </div>
+    <div class="table-wrap push-subscriptions-table-wrap">
+      <table class="responsive-table push-subscriptions-table">
+        <thead><tr><th>Пользователь</th><th>Устройство</th><th>Создана</th><th>Обновлена</th><th class="actions-header">Действия</th></tr></thead>
+        <tbody>
+          {% for subscription, user in push_subscription_rows %}
+          <tr>
+            <td data-label="Пользователь">{{ user.username }}{{ ' (удалён)' if user.deleted_at else '' }}</td>
+            <td data-label="Устройство">{{ push_device_label(subscription.user_agent) }}</td>
+            <td data-label="Создана">{{ display_datetime(subscription.created_at) }}</td>
+            <td data-label="Обновлена">{{ display_datetime(subscription.updated_at) }}</td>
+            <td data-label="Действия" class="table-actions">
+      <form method="post" action="/settings/push/subscriptions/{{ subscription.id }}/test">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="button button-secondary" type="submit">Отправить тест</button>
+              </form>
+              <form method="post" action="/settings/push/subscriptions/{{ subscription.id }}/delete" data-confirm="Удалить Push-подписку пользователя «{{ user.username }}» для устройства «{{ push_device_label(subscription.user_agent) }}»? Уведомления на нём перестанут приходить до новой подписки.">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="button button-danger" type="submit">Удалить</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty-state">Сохранённых Push-подписок пока нет.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+{% if current_user.role == 'admin' %}
+<section class="panel backup-settings-panel">
+  <div class="panel-heading backup-panel-heading">
+    <p class="eyebrow">Данные</p>
+    <h2>Резервное копирование</h2>
+    <p class="muted">Ручные копии бывают двух типов. Конфигурация переносит устройство мониторинга на чистую базу без накопленной истории, а полная копия сохраняет текущее состояние системы целиком.</p>
+  </div>
+
+  <div class="backup-setting-row">
+    <div>
+      <div class="setting-title"><strong>Бэкап конфигурации</strong></div>
+      <p>Настройки, пользователи, площадки, графики работы и объекты. История проверок, инциденты, аудит и метрики не сохраняются.</p>
+    </div>
+    <form method="post" action="/settings/backups/create">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="backup_type" value="configuration">
+      <button class="button" type="submit" aria-label="Создать бэкап конфигурации">Создать</button>
+    </form>
+  </div>
+
+  <div class="backup-setting-row">
+    <div>
+      <div class="setting-title"><strong>Полный бэкап</strong></div>
+      <p>Полная копия базы: конфигурация, история проверок, инциденты, журнал аудита, системные/сетевые метрики, чат, внутренние оповещения и Push-подписки.</p>
+    </div>
+    <form method="post" action="/settings/backups/create">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="backup_type" value="full">
+      <button class="button" type="submit" aria-label="Создать полный бэкап">Создать</button>
+    </form>
+  </div>
+
+  <div class="backup-setting-row">
+    <div>
+      <div class="setting-title"><strong>Целостность базы данных</strong></div>
+      <p>Проверяет структуру, основные связи и обязательные системные записи. Проверка ничего не изменяет и не удаляет.</p>
+    </div>
+    <form method="post" action="/settings/database-integrity">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="button button-secondary" type="submit" aria-label="Проверить целостность базы">Проверить</button>
+    </form>
+  </div>
+
+  <div class="backup-security-note">
+    <strong>Важно</strong>
+    <span>Резервные копии содержат чувствительные данные, включая хеши паролей пользователей и настройки SMTP. Храните файлы в защищённом месте.</span>
+  </div>
+
+  <div class="backup-subsection">
+    <div class="backup-subsection-heading">
+      <div>
+        <h3>Восстановление из файла</h3>
+        <p class="muted">Сначала система проверит формат, контрольную сумму и точное совпадение версии Monitoring Maxval. Бэкап другой версии восстановить нельзя.</p>
+      </div>
+    </div>
+    <form method="post" action="/settings/backups/upload" enctype="multipart/form-data" class="backup-upload-form backup-upload-grid" data-no-async>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="backup-file-field">
+        <span class="field-label">Файл резервной копии</span>
+        <input type="file" name="upload" accept=".mxbak,application/octet-stream" required>
+      </label>
+      <button class="button button-secondary" type="submit">Проверить файл</button>
+    </form>
+  </div>
+
+  {% if backup_candidate_error %}
+    <div class="backup-candidate is-incompatible"><strong>Файл не прошёл проверку.</strong><p>{{ backup_candidate_error }}</p></div>
+  {% endif %}
+  {% if backup_candidate %}
+    <div class="backup-candidate {{ 'is-compatible' if backup_candidate.compatible and backup_candidate.integrity_ok else 'is-incompatible' }}">
+      <h3>Проверенная резервная копия</h3>
+      <dl class="backup-meta">
+        <div><dt>Тип</dt><dd>{{ backup_candidate.backup_type_label }}</dd></div>
+        <div><dt>Создание</dt><dd>{{ backup_candidate.creation_mode_label }}</dd></div>
+        <div><dt>Версия</dt><dd>{{ backup_candidate.app_version }}</dd></div>
+        <div><dt>Формат</dt><dd>{{ backup_candidate.format_version }}</dd></div>
+        <div><dt>Дата</dt><dd>{{ display_datetime(backup_candidate.created_at) }}</dd></div>
+        <div><dt>Размер</dt><dd>{{ human_size(backup_candidate.size_bytes) }}</dd></div>
+        <div><dt>Целостность</dt><dd>{{ 'Проверена' if backup_candidate.integrity_ok else 'Не проверена' }}</dd></div>
+        <div><dt>Совместимость</dt><dd>{{ 'Совместима' if backup_candidate.compatible else 'Не совместима' }}</dd></div>
+      </dl>
+      <p>{{ backup_candidate.message }}</p>
+      {% if backup_candidate.compatible and backup_candidate.integrity_ok %}
+      <form method="post" action="/settings/backups/staged/{{ backup_candidate_token }}/restore" data-no-async data-confirm="{{ 'В базе уже есть данные. При восстановлении ВСЯ текущая база Мониторинг Maxval будет очищена без возможности отмены. Продолжить?' if backup_database_nonempty else 'Восстановить эту резервную копию? Текущие данные приложения будут заменены.' }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="backup-candidate-actions"><button class="button button-danger" type="submit">Удалить текущие данные и восстановить</button></div>
+      </form>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <div class="backup-subsection backup-list-section">
+    <div class="backup-subsection-heading">
+      <div><h3>Резервные копии</h3><p class="muted">Сейчас создаются только ручные копии. Тип создания уже сохраняется отдельно для будущих автоматических бэкапов.</p></div>
+    </div>
+    <div class="table-wrap">
+      <table class="responsive-table backup-table">
+        <thead><tr>
+          {{ sortable_header(request, 'Дата', 'created_at', backup_sort_state.column, backup_sort_state.direction, 'backup_sort', 'backup_direction') }}
+          {{ sortable_header(request, 'Тип', 'backup_type', backup_sort_state.column, backup_sort_state.direction, 'backup_sort', 'backup_direction') }}
+          {{ sortable_header(request, 'Создание', 'creation_mode', backup_sort_state.column, backup_sort_state.direction, 'backup_sort', 'backup_direction') }}
+          {{ sortable_header(request, 'Версия', 'app_version', backup_sort_state.column, backup_sort_state.direction, 'backup_sort', 'backup_direction') }}
+          {{ sortable_header(request, 'Размер', 'size_bytes', backup_sort_state.column, backup_sort_state.direction, 'backup_sort', 'backup_direction') }}
+          <th class="actions-header">Действия</th>
+        </tr></thead>
+        <tbody>
+        {% for backup in backup_rows %}
+          <tr>
+            <td data-label="Дата">{{ display_datetime(backup.created_at) }}</td>
+            <td data-label="Тип">{{ backup.backup_type_label }}</td>
+            <td data-label="Создание">{{ backup.creation_mode_label }}</td>
+            <td data-label="Версия">{{ backup.app_version }}</td>
+            <td data-label="Размер">{{ human_size(backup.size_bytes) }}</td>
+            <td class="actions-cell" data-label="Действия">
+              <div class="backup-actions">
+                <a class="button button-secondary" href="/settings/backups/{{ backup.filename }}/download">Скачать</a>
+                {% if backup.compatible %}
+                <form method="post" action="/settings/backups/{{ backup.filename }}/restore" data-no-async data-confirm="Восстановление полностью удалит текущие данные Мониторинг Maxval и заменит их содержимым этой резервной копии. Действие необратимо. Продолжить?">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button class="button" type="submit">Восстановить</button>
+                </form>
+                {% else %}
+                  <span class="badge badge-danger" title="{{ backup.message }}">Другая версия</span>
+                {% endif %}
+                <form method="post" action="/settings/backups/{{ backup.filename }}/delete" data-confirm="Удалить резервную копию «{{ backup.filename }}»?">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button class="button button-danger" type="submit">Удалить</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6">Резервных копий пока нет.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}

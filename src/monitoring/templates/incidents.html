@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pagination %}
+{% from "_section_icon.html" import section_icon %}
+{% block title %}Инциденты · Мониторинг Maxval{% endblock %}
+{% block content %}
+{% set target_filter = '&target_id=' ~ selected_target_id if selected_target_id else '' %}
+<section class="page-heading incidents-heading"><div><p class="eyebrow">Мониторинг</p><div class="page-title-row">{{ section_icon('incidents') }}<h1>Инциденты</h1></div><p class="muted">Подтверждённые сбои доступности и SNMP-пороги.</p></div>{% if current_user.role == 'admin' %}<div class="page-heading-actions incident-heading-actions"><form method="post" action="/incidents/delete-resolved" data-confirm="Удалить все закрытые инциденты из журнала? Это действие нельзя отменить."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="button button-secondary" type="submit">Удалить закрытые</button></form><form method="post" action="/incidents/delete-all" data-confirm="Удалить весь журнал инцидентов? Это действие нельзя отменить."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="button button-danger" type="submit">Очистить журнал</button></form></div>{% endif %}</section>
+
+<div class="panel quick-filters incident-quick-filters" aria-label="Быстрые фильтры инцидентов">
+  <div class="filter-panel-heading"><h2>Фильтр</h2></div>
+  <div class="incident-desktop-filters">
+    <div class="quick-filter-group"><span>Состояние:</span>
+      <a href="/incidents?kind={{ selected_kind }}&status=all&per_page={{ pager.per_page }}{{ target_filter }}" class="filter-chip {{ 'active' if selected_incident_status == 'all' else '' }}" {{ 'aria-current="page"' if selected_incident_status == 'all' else '' }}>Все</a>
+      <a href="/incidents?kind={{ selected_kind }}&status=open&per_page={{ pager.per_page }}{{ target_filter }}" class="filter-chip {{ 'active' if selected_incident_status == 'open' else '' }}" {{ 'aria-current="page"' if selected_incident_status == 'open' else '' }}>Открытые</a>
+      <a href="/incidents?kind={{ selected_kind }}&status=resolved&per_page={{ pager.per_page }}{{ target_filter }}" class="filter-chip {{ 'active' if selected_incident_status == 'resolved' else '' }}" {{ 'aria-current="page"' if selected_incident_status == 'resolved' else '' }}>Закрытые</a>
+    </div>
+    <div class="quick-filter-group"><span>Тип объекта:</span>
+      <a href="/incidents?kind=all&status={{ selected_incident_status }}&per_page={{ pager.per_page }}{{ target_filter }}" class="filter-chip {{ 'active' if selected_kind == 'all' else '' }}" {{ 'aria-current="page"' if selected_kind == 'all' else '' }}>Все</a>
+      {% for value, label in kind_options %}<a href="/incidents?kind={{ value }}&status={{ selected_incident_status }}&per_page={{ pager.per_page }}{{ target_filter }}" class="filter-chip {{ 'active' if selected_kind == value else '' }}" {{ 'aria-current="page"' if selected_kind == value else '' }}>{{ label }}</a>{% endfor %}
+    </div>
+    {% if selected_target_id %}<div class="quick-filter-group incident-target-filter"><span>Объект:</span><strong>{{ selected_target_name }}</strong><a href="/incidents?kind={{ selected_kind }}&status={{ selected_incident_status }}&per_page={{ pager.per_page }}">Снять фильтр</a></div>{% endif %}
+  </div>
+  <div class="incident-mobile-filters">
+    <div class="mobile-filter-field">
+      <span class="mobile-filter-label">Состояние</span>
+      <div class="incident-status-segments" role="group" aria-label="Состояние инцидента">
+        <a href="/incidents?kind={{ selected_kind }}&status=all&per_page={{ pager.per_page }}{{ target_filter }}" class="mobile-filter-segment {{ 'active' if selected_incident_status == 'all' else '' }}" {{ 'aria-current="page"' if selected_incident_status == 'all' else '' }}>Все</a>
+        <a href="/incidents?kind={{ selected_kind }}&status=open&per_page={{ pager.per_page }}{{ target_filter }}" class="mobile-filter-segment {{ 'active' if selected_incident_status == 'open' else '' }}" {{ 'aria-current="page"' if selected_incident_status == 'open' else '' }}>Открытые</a>
+        <a href="/incidents?kind={{ selected_kind }}&status=resolved&per_page={{ pager.per_page }}{{ target_filter }}" class="mobile-filter-segment {{ 'active' if selected_incident_status == 'resolved' else '' }}" {{ 'aria-current="page"' if selected_incident_status == 'resolved' else '' }}>Закрытые</a>
+      </div>
+    </div>
+    <form class="mobile-kind-filter" method="get" action="/incidents">
+      <input type="hidden" name="status" value="{{ selected_incident_status }}">
+      <input type="hidden" name="per_page" value="{{ pager.per_page }}">
+      {% if selected_target_id %}<input type="hidden" name="target_id" value="{{ selected_target_id }}">{% endif %}
+      <label for="incident-kind-mobile">Тип объекта</label>
+      <select id="incident-kind-mobile" name="kind" data-auto-submit>
+        <option value="all">Все типы</option>
+        {% for value, label in kind_options %}<option value="{{ value }}" {{ 'selected' if selected_kind == value else '' }}>{{ label }}</option>{% endfor %}
+      </select>
+      <noscript><button class="button" type="submit">Применить</button></noscript>
+    </form>
+    {% if selected_incident_status != 'all' or selected_kind != 'all' or selected_target_id %}
+    <div class="active-filter-summary">
+      <span>Показаны: {{ 'все' if selected_incident_status == 'all' else 'открытые' if selected_incident_status == 'open' else 'закрытые' }} · {{ 'все типы' if selected_kind == 'all' else kind_labels[selected_kind] }}{% if selected_target_id %} · {{ selected_target_name }}{% endif %}</span>
+      <a href="/incidents?kind=all&status=all&per_page={{ pager.per_page }}">Сбросить</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<section class="incident-list">
+  {% for incident, target, site in incident_rows %}
+  <article id="incident-{{ incident.id }}" class="panel incident-card incident-{{ incident.status }}">
+    <div class="incident-id-row"><small class="entity-id incident-id">ID инцидента: {{ incident.id }}</small></div>
+    <div class="entity-heading">
+      <div class="incident-heading-copy"><h2><a class="detail-title-link" href="/targets/{{ target.id }}/history"><span class="detail-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.8"></circle><path d="m15 15 5 5"></path></svg></span><span>{{ target.name }}</span></a></h2><p class="incident-location"><span class="incident-site-name">{{ site.name }}</span><span class="incident-location-separator"> · </span><span class="incident-address">{{ target.address }}{% if target.checker_type != 'icmp' %}:{{ target.port }}{% endif %}</span></p></div>
+      <div class="badge-group"><span class="badge">{{ kind_labels[target.kind] }}</span>{% if incident.source_kind == 'snmp' %}<span class="badge">SNMP</span><span class="badge {{ 'badge-danger' if incident.severity == 'critical' else 'badge-warning' }}">{{ 'Critical' if incident.severity == 'critical' else 'Warning' }}</span>{% elif incident.source_kind == 'check' %}<span class="badge">Сервис</span><span class="badge badge-danger">Critical</span>{% endif %}<span class="badge {{ 'badge-danger' if incident.status == 'open' else 'badge-success' }}">{{ 'Открыт' if incident.status == 'open' else 'Закрыт' }}</span>{% if not target.enabled %}<span class="badge badge-danger">Объект отключён</span>{% endif %}</div>
+    </div>
+    <dl class="incident-meta">
+      <div><dt>Открыт</dt><dd>{{ display_datetime(incident.opened_at) }}</dd></div>
+      {% if incident.resolved_at %}<div><dt>Восстановлен</dt><dd>{{ display_datetime(incident.resolved_at) }}</dd></div>{% endif %}
+      <div><dt>{{ 'Проверок с превышением' if incident.source_kind == 'snmp' else 'Неудачных проверок' }}</dt><dd>{{ incident.failure_count }}</dd></div>
+      <div class="incident-last-error"><dt>{{ 'Порог' if incident.source_kind == 'snmp' else 'Последняя ошибка' }}</dt><dd>{{ incident.last_message or 'без сообщения' }}</dd></div>
+    </dl>
+    {% if current_user.role == 'admin' %}
+    <div class="incident-actions compact-action">
+      <form method="get" action="/targets" class="incident-edit-target-form">
+        <input type="hidden" name="focus_target_id" value="{{ target.id }}">
+        <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+        <button class="button button-secondary" type="submit" title="Изменить объект {{ target.name }}">Изменить объект</button>
+      </form>
+      {% if target.enabled %}
+      <form method="post" action="/incidents/{{ incident.id }}/disable-target" data-confirm="Отключить объект «{{ target.name }}»? Его плановые и ручные проверки будут остановлены.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+        <button class="button button-secondary" type="submit">Отключить объект</button>
+      </form>
+      {% endif %}
+      <form method="post" action="/incidents/{{ incident.id }}/delete" data-confirm="Удалить этот инцидент из журнала?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+        <button class="button button-danger" type="submit">Удалить инцидент</button>
+      </form>
+    </div>
+    {% endif %}
+  </article>
+  {% else %}
+  <div class="panel empty-state"><strong>Инцидентов пока нет</strong><p>Они появятся после подтверждённой недоступности объекта.</p></div>
+  {% endfor %}
+</section>
+{{ pagination(request, pager) }}
+{% endblock %}

@@ -1,0 +1,8 @@
+{% macro sortable_header(request, label, column, current_sort, current_direction, sort_parameter='sort', direction_parameter='direction') %}
+<th class="sortable-header" aria-sort="{% if current_sort == column %}{{ 'ascending' if current_direction == 'asc' else 'descending' }}{% else %}none{% endif %}">
+  <a class="sort-link" href="{{ sort_url(request, column, current_sort, current_direction, sort_parameter, direction_parameter) }}">
+    <span>{{ label }}</span>
+    <span class="sort-indicator" aria-hidden="true">{% if current_sort == column %}{{ '↑' if current_direction == 'asc' else '↓' }}{% else %}↕{% endif %}</span>
+  </a>
+</th>
+{% endmacro %}

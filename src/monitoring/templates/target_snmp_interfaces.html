@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ target.name }} · SNMP интерфейсы{% endblock %}
+{% block content %}
+<div class="snmp-page snmp-interfaces-page">
+  <section class="page-heading snmp-heading">
+    <div>
+      <p class="eyebrow">SNMP · IF-MIB</p>
+      <div class="snmp-title-row"><span class="snmp-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="6" height="6" rx="1"></rect><rect x="15" y="14" width="6" height="6" rx="1"></rect><path d="M9 7h3a3 3 0 0 1 3 3v4M9 17h3a3 3 0 0 0 3-3"></path></svg></span><h1>Интерфейсы · {{ target.name }}</h1></div>
+      <p class="muted">{{ target.site.name }} · {{ target.address }}.<br>Состояние и трафик выбранных интерфейсов обновляются при SNMP polling.</p>
+    </div>
+    <div class="page-heading-actions snmp-heading-actions">
+      <div class="snmp-header-icon-actions">
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp" title="SNMP" aria-label="SNMP"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1"></rect><rect x="4" y="14" width="16" height="6" rx="1"></rect><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"></path></svg></a>
+        {% if current_user.role == 'admin' %}<a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/discovery" title="OID Discovery" aria-label="OID Discovery"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="5"></circle><path d="m14 14 6 6M8 10h4M10 8v4"></path></svg></a>{% endif %}
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/supplies" title="Расходники" aria-label="Расходники"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V4h10v4M7 17h10v3H7z"></path><rect x="4" y="8" width="16" height="9" rx="2"></rect><path d="M8 12h.01"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/snmp/thresholds" title="Пороги" aria-label="Пороги"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M11 16v4"></path></svg></a>
+        <a class="icon-action snmp-header-icon-action" href="/targets/{{ target.id }}/history" title="История доступности" aria-label="История доступности"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg></a>
+      </div>
+    </div>
+  </section>
+
+  {% set current_offline = latest_target_status != 'up' %}
+  <section class="panel snmp-interfaces-summary">
+    <div class="panel-heading snmp-panel-heading">
+      <div><h2>Инвентаризация интерфейсов</h2><p class="muted">Используются стандартные IF-MIB/IF-X-MIB. Полный walk дерева устройства не выполняется.</p></div>
+      <span class="badge">Выбрано: {{ monitored_count }} / {{ max_monitored_interfaces }}</span>
+    </div>
+    {% if current_offline %}<div class="alert alert-warning">Основная проверка объекта сейчас неуспешна. Ручное обнаружение и плановый SNMP polling интерфейсов не выполняются, сохранённый список остаётся доступен.</div>{% endif %}
+    {% if not config or not config.enabled %}<div class="alert alert-warning">SNMP для объекта выключен. Сначала включите SNMP Core.</div>{% endif %}
+    {% if current_user.role == 'admin' %}
+    <div class="snmp-interface-toolbar">
+      <form method="post" action="/targets/{{ target.id }}/snmp/interfaces/discover">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="button button-primary" type="submit" {{ 'disabled' if not config or not config.enabled else '' }}>Обновить список интерфейсов</button>
+      </form>
+      <p class="muted">Повторное обнаружение обновляет имя, alias, скорость и состояние. Исчезнувшие интерфейсы не удаляются автоматически.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="panel table-wrap entity-table-wrap snmp-interfaces-panel">
+    <div class="panel-heading snmp-interface-list-heading">
+      <div class="snmp-interface-list-copy"><div class="snmp-interface-list-title"><h2>Интерфейсы</h2><button class="help-trigger" type="button" aria-label="Справка по интерфейсам" data-help-wide data-help="Интерфейсы обнаруживаются из стандартных IF-MIB и IF-X-MIB. В мониторинг попадают только отмеченные интерфейсы; их данные не меняют основной статус доступности объекта.&#10;&#10;ifIndex — числовой идентификатор интерфейса на устройстве. Он используется SNMP для обращения к конкретному порту.&#10;&#10;Admin — административное состояние порта: включён ли он в настройках самого устройства.&#10;&#10;Link — фактическое рабочее состояние канала, которое сообщает устройство.&#10;&#10;Скорость — заявленная устройством скорость интерфейса.&#10;&#10;RX / TX — текущая скорость трафика в bit/s: RX (receive) — данные, принятые устройством через интерфейс; TX (transmit) — данные, отправленные устройством через него. Скорость появляется после двух успешных опросов.&#10;&#10;Ошибки / отбросы — накопительные SNMP-счётчики пакетов с момента перезагрузки устройства: ошибки не удалось корректно обработать, отбросы были намеренно отброшены интерфейсом. Для RX показаны входящие значения, для TX — исходящие.">?</button></div><p class="muted">Для выбранных интерфейсов регулярно обновляются состояние, RX/TX, ошибки и отброшенные пакеты.</p></div>
+      {% if current_user.role == 'admin' %}<form method="post" action="/targets/{{ target.id }}/snmp/interfaces/poll"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="icon-action snmp-interface-poll-button" type="submit" title="Обновить данные интерфейсов" aria-label="Обновить данные интерфейсов">↻</button></form>{% endif %}
+    </div>
+    <div class="filter-panel-heading snmp-filter-panel-heading"><h3>Фильтр</h3></div>
+    <form method="get" class="snmp-interface-filters">
+      <label>Поиск<input type="search" name="q" value="{{ interface_query }}" placeholder="Имя, alias, описание или ifIndex"></label>
+      <label>Состояние<select name="state"><option value="all" {{ 'selected' if interface_state == 'all' else '' }}>Все</option><option value="monitored" {{ 'selected' if interface_state == 'monitored' else '' }}>Выбранные</option><option value="up" {{ 'selected' if interface_state == 'up' else '' }}>Link Up</option><option value="down" {{ 'selected' if interface_state == 'down' else '' }}>Link Down</option><option value="missing" {{ 'selected' if interface_state == 'missing' else '' }}>Не обнаружены</option></select></label>
+      <div class="form-actions snmp-interface-filter-actions"><button class="button button-secondary" type="submit">Применить</button><a class="icon-action snmp-interface-filter-reset" href="/targets/{{ target.id }}/snmp/interfaces" title="Сбросить фильтры" aria-label="Сбросить фильтры">×</a></div>
+    </form>
+
+    {% if current_user.role == 'admin' %}<form method="post" action="/targets/{{ target.id }}/snmp/interfaces/selection">{% endif %}
+      {% if current_user.role == 'admin' %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+      <div class="table-wrap entity-table-wrap">
+        <table class="entity-table responsive-table snmp-interfaces-table">
+          <thead><tr>{% if current_user.role == 'admin' %}<th><span class="sr-only">Мониторинг</span></th>{% endif %}<th>Интерфейс</th><th>Alias / описание</th><th>ifIndex</th><th>Admin</th><th>Link</th><th>Скорость</th><th>RX / TX, Mbit/s</th><th>Ошибки / отбросы</th><th>Последние данные</th><th>Состояние</th></tr></thead>
+          <tbody>
+            {% for item in interfaces %}
+            <tr class="{{ 'snmp-interface-missing' if not item.present else '' }}">
+              {% if current_user.role == 'admin' %}<td data-label="Мониторинг">{% if item.present %}<input type="hidden" name="visible_interface_id" value="{{ item.id }}">{% endif %}<input type="checkbox" name="selected_interface_id" value="{{ item.id }}" {{ 'checked' if item.monitor_enabled else '' }} {{ 'disabled' if not item.present else '' }} aria-label="Мониторить интерфейс {{ item.if_name or item.if_descr or item.if_index }}"></td>{% endif %}
+              <td data-label="Интерфейс"><strong>{{ item.if_name or item.if_descr or ('ifIndex ' ~ item.if_index) }}</strong>{% if item.phys_address %}<small class="muted snmp-interface-secondary snmp-interface-phys-address">{{ item.phys_address }}</small>{% endif %}</td>
+              <td data-label="Alias / описание">{% if item.if_alias %}<strong>{{ item.if_alias }}</strong>{% endif %}{% if item.if_descr and item.if_descr != item.if_name %}<small class="muted snmp-interface-secondary">{{ item.if_descr }}</small>{% elif not item.if_alias %}—{% endif %}</td>
+              <td data-label="ifIndex">{{ item.if_index }}</td>
+              <td data-label="Admin"><span class="badge {{ 'badge-success' if item.admin_status == 1 else 'badge-danger' if item.admin_status == 2 else 'badge-warning' }}">{{ interface_status_label(item.admin_status, administrative=True) }}</span></td>
+              <td data-label="Link"><span class="badge {{ 'badge-success' if item.oper_status == 1 else 'badge-danger' if item.oper_status == 2 else 'badge-warning' }}">{{ interface_status_label(item.oper_status) }}</span></td>
+              <td data-label="Скорость">{{ format_interface_speed(item.speed_bps) }}</td>
+              <td data-label="RX / TX, Mbit/s">{% if item.monitor_enabled %}{% if item.rx_bps is none and item.tx_bps is none %}<span class="muted">Ожидание данных</span>{% else %}<div class="snmp-interface-readings"><span class="snmp-interface-reading">RX {{ format_interface_rate(item.rx_bps) }}</span><span class="snmp-interface-reading">TX {{ format_interface_rate(item.tx_bps) }}</span></div>{% endif %}{% if item.traffic_error %}<small class="muted snmp-interface-secondary">{{ item.traffic_error }}</small>{% endif %}{% else %}—{% endif %}</td>
+              <td data-label="Ошибки / отбросы">{% if item.monitor_enabled %}<div class="snmp-interface-readings"><span class="snmp-interface-reading">RX {{ item.in_errors if item.in_errors is not none else '—' }} / {{ item.in_discards if item.in_discards is not none else '—' }}</span><span class="snmp-interface-reading">TX {{ item.out_errors if item.out_errors is not none else '—' }} / {{ item.out_discards if item.out_discards is not none else '—' }}</span></div>{% else %}—{% endif %}</td>
+              <td data-label="Последние данные">{{ display_datetime(item.last_polled_at or item.last_seen_at) if item.last_polled_at or item.last_seen_at else '—' }}{% if item.last_error %}<small class="muted snmp-interface-secondary">{{ item.last_error }}</small>{% endif %}</td>
+              <td data-label="Состояние">{% if not item.present %}<span class="badge badge-warning">Не обнаружен</span>{% elif item.monitor_enabled %}<span class="badge badge-success">Мониторится</span>{% else %}<span class="badge">Не выбран</span>{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 11 if current_user.role == 'admin' else 10 }}" class="empty-state">Интерфейсы ещё не обнаружены. {% if current_user.role == 'admin' %}Нажмите «Обновить список интерфейсов».{% endif %}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if current_user.role == 'admin' and interfaces %}
+      <div class="snmp-interface-selection-actions"><span class="muted">Максимум {{ max_monitored_interfaces }} интерфейсов. Исчезнувшие интерфейсы сохраняются в списке и не опрашиваются.</span><button class="button" type="submit">Сохранить выбор</button></div>
+      {% endif %}
+    {% if current_user.role == 'admin' %}</form>{% endif %}
+  </section>
+</div>
+{% endblock %}

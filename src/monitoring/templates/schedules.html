@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_section_icon.html" import section_icon %}
+{% block title %}Графики работы · Мониторинг Maxval{% endblock %}
+{% block content %}
+<section class="page-heading"><div class="page-heading-main"><p class="eyebrow">Расписание</p><div class="page-title-row">{{ section_icon('schedule') }}<h1>Графики работы</h1></div><p class="muted">Площадки опрашиваются только в рабочее время назначенного графика.</p></div></section>
+
+{% if current_user.role == 'admin' %}
+<section class="panel form-panel">
+  <h2>Добавить график</h2>
+  <form method="post" action="/schedules" class="schedule-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="schedule-header-fields"><label>Название<input name="name" required maxlength="120" placeholder="Офисы 09:00–18:00"></label><label class="checkbox-label schedule-24x7"><input type="checkbox" name="is_24x7" value="true" data-schedule-24x7> Круглосуточно</label></div>
+    <div class="schedule-days" data-schedule-days>
+      {% for field, label in day_fields %}
+      <div class="schedule-day"><label class="checkbox-label"><input type="checkbox" name="{{ field }}_enabled" value="true" data-schedule-day> {{ label }}</label><label>Начало<input type="time" name="{{ field }}_start" value="09:00"></label><label>Окончание<input type="time" name="{{ field }}_end" value="18:00"></label></div>
+      {% endfor %}
+    </div>
+    <div class="form-actions"><button class="button button-primary" type="submit">Добавить график</button></div>
+  </form>
+</section>
+{% endif %}
+
+<section class="entity-grid schedule-grid">
+{% for row in schedule_rows %}
+<article class="panel entity-card schedule-card">
+  <div class="entity-heading"><div><h2>{{ row.schedule.name }}</h2><p>{{ row.summary }}</p></div><span class="badge {{ 'badge-success' if row.working_now else 'badge-warning' }}">{{ 'сейчас рабочее время' if row.working_now else 'сейчас нерабочее время' }}</span></div>
+  <p class="muted">Назначено площадкам: {{ row.site_count }}</p>
+  {% if row.schedule.built_in %}<p class="muted">Встроенный график. Автоматически назначается новым площадкам.</p>{% elif current_user.role == 'admin' %}
+  <details class="table-editor"><summary>Изменить график</summary>
+    <form id="schedule-edit-{{ row.schedule.id }}" method="post" action="/schedules/{{ row.schedule.id }}/update" class="schedule-form compact-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="schedule-header-fields"><label>Название<input name="name" value="{{ row.schedule.name }}" required maxlength="120"></label><label class="checkbox-label schedule-24x7"><input type="checkbox" name="is_24x7" value="true" {{ 'checked' if row.schedule.is_24x7 else '' }} data-schedule-24x7> Круглосуточно</label></div>
+      <div class="schedule-days" data-schedule-days>
+      {% for field, label in day_fields %}{% set start = row.schedule|attr(field ~ '_start') %}{% set end = row.schedule|attr(field ~ '_end') %}
+        <div class="schedule-day"><label class="checkbox-label"><input type="checkbox" name="{{ field }}_enabled" value="true" {{ 'checked' if start and end else '' }} data-schedule-day> {{ label }}</label><label>Начало<input type="time" name="{{ field }}_start" value="{{ start or '09:00' }}"></label><label>Окончание<input type="time" name="{{ field }}_end" value="{{ end or '18:00' }}"></label></div>
+      {% endfor %}
+      </div>
+    </form>
+    <div class="schedule-editor-actions">
+      <form method="post" action="/schedules/{{ row.schedule.id }}/delete" class="compact-action" data-confirm="Удалить график «{{ row.schedule.name }}»?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-danger" type="submit" {{ 'disabled' if row.site_count else '' }}>Удалить график</button>
+      </form>
+      <button class="button button-primary" type="submit" form="schedule-edit-{{ row.schedule.id }}">Сохранить</button>
+    </div>
+  </details>
+  {% endif %}
+</article>
+{% endfor %}
+</section>
+{% endblock %}
